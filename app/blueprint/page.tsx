@@ -66,224 +66,87 @@ export default function BlueprintPage() {
     generateBlueprint();
   }, []);
 
+  // ---------- LOADING UI ----------
 
+  if (loading || stage !== "done") {
+    return (
+      <main className="min-h-screen bg-gray-50 flex items-center justify-center px-6">
+        <div className="max-w-md w-full bg-white border border-gray-200 rounded-2xl p-10 shadow-[0_2px_12px_rgba(0,0,0,0.05)]">
 
-
-
-// ---------- LOADING UI ----------
-
-if (loading || stage !== "done") {
-  return (
-    <main className="relative min-h-screen overflow-hidden bg-black flex items-center justify-center px-6">
-
-      {/* BACKGROUND GLOW */}
-
-      <div className="absolute inset-0 overflow-hidden">
-
-        <div className="absolute top-[-120px] left-[-120px] w-[320px] h-[320px] bg-white/10 blur-3xl rounded-full animate-pulse" />
-
-        <div className="absolute bottom-[-120px] right-[-120px] w-[320px] h-[320px] bg-white/5 blur-3xl rounded-full animate-pulse" />
-
-      </div>
-
-      {/* MAIN CARD */}
-
-      <div className="relative z-10 max-w-xl w-full bg-white/5 backdrop-blur-2xl border border-white/10 rounded-3xl p-10 shadow-[0_0_80px_rgba(255,255,255,0.05)]">
-
-        {/* TOP BADGE */}
-
-        <div className="flex items-center justify-center mb-8">
-
-          <div className="relative">
-
-            <div className="absolute inset-0 rounded-full bg-white/20 blur-xl animate-pulse" />
-
-            <div className="relative h-20 w-20 rounded-full border border-white/20 bg-white/10 flex items-center justify-center">
-
-              {stage === "thinking" && (
-                <div className="h-4 w-4 rounded-full bg-white animate-ping" />
-              )}
-
-              {stage === "generating" && (
-<div className="h-8 w-8 border-2 border-white rounded-xl rotate-12 animate-[spin_4s_linear_infinite]" />
-              )}
-
-              {stage === "finalizing" && (
-                <div className="text-white text-3xl font-bold">
-                  ✓
-                </div>
-              )}
-
-              {stage === "error" && (
-                <div className="text-red-400 text-3xl font-bold">
-                  !
-                </div>
-              )}
-
+          <div className="flex justify-center mb-6">
+            <div className="h-14 w-14 rounded-2xl bg-black text-white flex items-center justify-center text-xl font-bold">
+              AI
             </div>
-
           </div>
 
+          <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden mb-6">
+            <div className="bg-black h-full w-2/3 animate-pulse rounded-full" />
+          </div>
+
+          <div className="text-center">
+
+            {stage === "thinking" && (
+              <>
+                <h2 className="text-2xl font-semibold text-black">
+                  Thinking like a founder
+                </h2>
+
+                <p className="text-gray-500 mt-3 leading-7">
+                  Understanding your users, pain points,
+                  and startup opportunity.
+                </p>
+              </>
+            )}
+
+            {stage === "generating" && (
+              <>
+                <h2 className="text-2xl font-semibold text-black">
+                  Generating Blueprint
+                </h2>
+
+                <p className="text-gray-500 mt-3 leading-7">
+                  Designing your MVP, market strategy,
+                  and product structure.
+                </p>
+              </>
+            )}
+
+            {stage === "finalizing" && (
+              <>
+                <h2 className="text-2xl font-semibold text-black">
+                  Finalizing Output
+                </h2>
+
+                <p className="text-gray-500 mt-3 leading-7">
+                  Structuring everything into a readable
+                  startup blueprint.
+                </p>
+              </>
+            )}
+
+            {stage === "error" && (
+              <>
+                <h2 className="text-2xl font-semibold text-red-500">
+                  Something went wrong
+                </h2>
+
+                <p className="text-gray-500 mt-3">
+                  Please try again.
+                </p>
+              </>
+            )}
+
+          </div>
         </div>
-
-        {/* PROGRESS */}
-
-        <div className="mb-8">
-
-          <div className="flex justify-between text-sm text-gray-400 mb-3">
-            <span>AI Processing</span>
-
-            <span>
-{stage === "thinking" && "18%"}
-{stage === "generating" && "67%"}
-{stage === "finalizing" && "92%"}
-              {stage === "error" && "Failed"}
-            </span>
-          </div>
-
-          <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-
-            <div
-              className={`
-                h-full rounded-full transition-all duration-700
-                bg-white
-                ${stage === "thinking" ? "w-1/4" : ""}
-                ${stage === "generating" ? "w-[70%]" : ""}
-                ${stage === "finalizing" ? "w-[95%]" : ""}
-                ${stage === "error" ? "w-full bg-red-400" : ""}
-              `}
-            />
-
-          </div>
-
-        </div>
-
-        {/* CONTENT */}
-
-<div className="text-center transition-all duration-500">
-
-
-          {stage === "thinking" && (
-            <>
-              <p className="text-sm uppercase tracking-[0.3em] text-gray-500 mb-4">
-                Discovery Phase
-              </p>
-
-              <h2 className="text-4xl font-bold text-white leading-tight">
-                Understanding Your Startup
-              </h2>
-
-              <p className="text-gray-400 mt-5 leading-8 text-lg">
-                Studying your market opportunity,
-                founder intent, user pain points,
-                and competitive positioning.
-              </p>
-            </>
-          )}
-
-          {stage === "generating" && (
-            <>
-              <p className="text-sm uppercase tracking-[0.3em] text-gray-500 mb-4">
-                Architecture Phase
-              </p>
-
-              <h2 className="text-4xl font-bold text-white leading-tight">
-                Designing Product Systems
-              </h2>
-
-              <p className="text-gray-400 mt-5 leading-8 text-lg">
-                Structuring your MVP roadmap,
-                monetization strategy,
-                and product experience.
-              </p>
-            </>
-          )}
-
-          {stage === "finalizing" && (
-            <>
-              <p className="text-sm uppercase tracking-[0.3em] text-gray-500 mb-4">
-                Strategy Phase
-              </p>
-
-              <h2 className="text-4xl font-bold text-white leading-tight">
-                Preparing Execution Blueprint
-              </h2>
-
-              <p className="text-gray-400 mt-5 leading-8 text-lg">
-                Transforming startup intelligence
-                into a clear execution-ready
-                product blueprint.
-              </p>
-            </>
-          )}
-
-          {stage === "error" && (
-            <>
-              <h2 className="text-4xl font-bold text-red-400">
-                Something went wrong
-              </h2>
-
-              <p className="text-gray-400 mt-5 text-lg">
-                Please try again.
-              </p>
-            </>
-          )}
-
-        </div>
-
-        {/* AI THINKING BOX */}
-
-        {stage !== "error" && (
-          <div className="mt-10 border border-white/10 rounded-2xl bg-white/[0.03] p-5">
-
-            <p className="text-xs uppercase tracking-[0.2em] text-gray-500 mb-4">
-              AI Analysis
-            </p>
-
-            <div className="space-y-3 text-sm">
-
-              <div className="flex items-center gap-3 text-gray-300">
-                <div className="h-2 w-2 rounded-full bg-green-400" />
-                Market opportunity identified
-              </div>
-
-              <div className="flex items-center gap-3 text-gray-300">
-                <div className="h-2 w-2 rounded-full bg-green-400" />
-                User pain points mapped
-              </div>
-
-              <div className="flex items-center gap-3 text-gray-300">
-                <div className="h-2 w-2 rounded-full bg-white animate-pulse" />
-
-                {stage === "thinking" &&
-                  "Analyzing startup signals..."}
-
-                {stage === "generating" &&
-                  "Generating MVP architecture..."}
-
-                {stage === "finalizing" &&
-                  "Finalizing execution strategy..."}
-              </div>
-
-            </div>
-
-          </div>
-        )}
-
-      </div>
-
-    </main>
-  );
-}
-
-
+      </main>
+    );
+  }
 
   // ---------- FORMAT BLUEPRINT ----------
 
-const sections = blueprint
-  .split(/\n(?=\d+\.\s)/)
-  .filter(Boolean);
-
+  const sections = blueprint
+    .split(/\d+\.\s/)
+    .filter(Boolean);
 
   // ---------- FINAL UI ----------
 
