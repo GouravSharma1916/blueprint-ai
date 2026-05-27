@@ -33,9 +33,7 @@ export default function Home() {
               <ArrowRight className="h-4 w-4" />
             </a>
 
-            <button className="rounded-xl border border-gray-300 bg-white px-6 py-3 hover:bg-gray-50 transition">
-              See a sample
-            </button>
+           
 
           </div>
 
