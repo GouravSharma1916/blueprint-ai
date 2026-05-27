@@ -209,50 +209,7 @@ export default function Home() {
 
       </section>
 
-      {/* TESTIMONIALS */}
-      <section className="py-20 px-6 border-b border-gray-200">
-
-        <div className="max-w-6xl mx-auto">
-
-          <p className="text-sm tracking-wide text-gray-500 uppercase">
-            What founders say
-          </p>
-
-          <div className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-6">
-
-            {[
-              "Went from a vague concept to a real execution plan in minutes.",
-              "The market scoring was surprisingly accurate.",
-              "I use this before every side project now.",
-              "The week-one plan alone was worth it."
-            ].map((quote, index) => (
-              <div
-                key={index}
-                className="rounded-3xl bg-[#efede7] p-8"
-              >
-                <p className="text-lg leading-relaxed text-gray-700">
-                  "{quote}"
-                </p>
-
-                <div className="mt-6 flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-white border border-gray-300" />
-
-                  <div>
-                    <p className="font-medium">Founder</p>
-                    <p className="text-sm text-gray-500">
-                      Startup builder
-                    </p>
-                  </div>
-                </div>
-
-              </div>
-            ))}
-
-          </div>
-        </div>
-
-      </section>
-
+     
       {/* FAQ */}
       <section className="py-20 px-6 border-b border-gray-200">
 
