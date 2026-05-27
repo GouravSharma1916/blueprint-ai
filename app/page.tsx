@@ -209,37 +209,75 @@ export default function Home() {
 
       </section>
 
+
+
+
+
+
      
       {/* FAQ */}
-      <section className="py-20 px-6 border-b border-gray-200">
+<section className="py-20 px-6 border-b border-gray-200">
 
-        <div className="max-w-4xl mx-auto">
+  <div className="max-w-4xl mx-auto">
 
-          <p className="text-sm tracking-wide text-gray-500 uppercase">
-            Common Questions
+    <p className="text-sm tracking-wide text-gray-500 uppercase">
+      Common Questions
+    </p>
+
+    <div className="mt-10 space-y-4">
+
+      {[
+        {
+          q: "How is this different from ChatGPT?",
+          a: "Blueprint AI follows a structured founder-thinking framework instead of generating random startup advice. It analyzes your idea like a product strategist — focusing on target users, MVP scope, market timing, and execution clarity."
+        },
+        {
+          q: "Will this generate generic startup ideas?",
+          a: "No. The system is designed to avoid vague startup language and push toward specificity, practical execution, and focused target users."
+        },
+        {
+          q: "Can I use this before talking to developers?",
+          a: "Yes. The blueprint helps you define your MVP, user flow, core features, and product direction before spending money on development."
+        },
+        {
+          q: "How detailed is the MVP plan?",
+          a: "You receive a structured breakdown including the problem, target user, MVP features, screens, user flow, data models, and execution advice."
+        },
+        {
+          q: "Does this help validate startup ideas?",
+          a: "Yes. The goal is not just idea generation — it’s helping founders identify whether an idea is focused, differentiated, and realistically executable."
+        }
+      ].map((faq, index) => (
+        <details
+          key={index}
+          className="group rounded-2xl border border-gray-300 bg-white px-6 py-5 transition-all"
+        >
+
+          <summary className="flex cursor-pointer items-center justify-between list-none">
+
+            <span className="text-lg font-medium text-black">
+              {faq.q}
+            </span>
+
+            <span className="text-2xl text-gray-400 transition-transform duration-300 group-open:rotate-45">
+              +
+            </span>
+
+          </summary>
+
+          <p className="mt-4 text-gray-600 leading-7 pr-6">
+            {faq.a}
           </p>
 
-          <div className="mt-10 space-y-4">
+        </details>
+      ))}
 
-            {[
-              "What do I need to prepare before starting?",
-              "How long does the interview take?",
-              "Is my idea kept private?",
-              "Can I generate a blueprint for an existing project?"
-            ].map((item) => (
-              <div
-                key={item}
-                className="rounded-2xl border border-gray-300 bg-white px-6 py-5 flex items-center justify-between"
-              >
-                <span>{item}</span>
-                <span>+</span>
-              </div>
-            ))}
+    </div>
+  </div>
 
-          </div>
-        </div>
+</section>
 
-      </section>
+
 
       {/* CTA */}
       <section className="py-24 px-6 text-center">
