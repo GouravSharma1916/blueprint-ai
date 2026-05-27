@@ -14,7 +14,7 @@ export default function Home() {
 
           <h1 className="mt-8 text-5xl md:text-7xl font-serif leading-tight tracking-tight">
             Turn your idea into a{" "}
-            <span className="italic">startup blueprint</span>{" "}
+            <span className="italic">structured blueprint</span>{" "}
             in minutes
           </h1>
 
