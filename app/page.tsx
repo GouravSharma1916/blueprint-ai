@@ -327,7 +327,7 @@ export default function Home() {
           </a>
 
           <p className="mt-6 text-sm text-gray-400">
-            Powered by Claude ・ Built by Anthropic
+             Built by Krishna AI
           </p>
 
         </div>
