@@ -59,27 +59,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* STATS */}
-      <section className="border-b border-gray-200">
-        <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3">
-
-          <div className="py-10 text-center border-b md:border-b-0 md:border-r border-gray-200">
-            <h2 className="text-5xl font-serif">2,400+</h2>
-            <p className="mt-2 text-gray-500">blueprints generated</p>
-          </div>
-
-          <div className="py-10 text-center border-b md:border-b-0 md:border-r border-gray-200">
-            <h2 className="text-5xl font-serif">~2 min</h2>
-            <p className="mt-2 text-gray-500">average interview time</p>
-          </div>
-
-          <div className="py-10 text-center">
-            <h2 className="text-5xl font-serif">94%</h2>
-            <p className="mt-2 text-gray-500">found it useful</p>
-          </div>
-
-        </div>
-      </section>
+     
 
       {/* HOW IT WORKS */}
       <section className="py-20 px-6 border-b border-gray-200">
