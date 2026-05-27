@@ -110,108 +110,199 @@ export default function Home() {
         </div>
       </section>
 
-      {/* SAMPLE OUTPUT */}
-      <section className="py-20 px-6 border-b border-gray-200">
 
-        <div className="max-w-6xl mx-auto">
 
-          <p className="text-sm tracking-wide text-gray-500 uppercase">
-            Sample Blueprint Output
-          </p>
 
-          <div className="mt-10 rounded-3xl border border-gray-300 bg-[#f1efe9] overflow-hidden">
+     {/* SAMPLE OUTPUT */}
+<section className="py-20 px-6 border-b border-gray-200 bg-[#f8f8f7]">
 
-            <div className="border-b border-gray-300 px-6 py-4 bg-white flex items-center gap-2">
-              <div className="h-3 w-3 rounded-full bg-red-400" />
-              <div className="h-3 w-3 rounded-full bg-yellow-400" />
-              <div className="h-3 w-3 rounded-full bg-green-400" />
+  <div className="max-w-6xl mx-auto">
 
-              <p className="ml-4 text-sm text-gray-600">
-                Blueprint — FocusFlow: async team standup tool
+    <div className="flex items-end justify-between gap-6 flex-wrap">
+      <div>
+        <p className="text-sm tracking-[0.18em] text-gray-500 uppercase">
+          Sample Blueprint Output
+        </p>
+
+        <h2 className="mt-3 text-4xl md:text-5xl font-serif tracking-tight text-black">
+          What founders receive
+        </h2>
+      </div>
+
+      <p className="max-w-md text-sm leading-7 text-gray-500">
+        Structured startup thinking generated from your interview answers.
+        Clear positioning, MVP scope, market direction, and founder guidance.
+      </p>
+    </div>
+
+    <div className="mt-12 rounded-[32px] border border-gray-300 bg-[#f1efe9] overflow-hidden shadow-sm">
+
+      {/* top bar */}
+      <div className="border-b border-gray-300 px-6 py-4 bg-white flex items-center gap-2">
+        <div className="h-3 w-3 rounded-full bg-red-400" />
+        <div className="h-3 w-3 rounded-full bg-yellow-400" />
+        <div className="h-3 w-3 rounded-full bg-green-400" />
+
+        <p className="ml-4 text-sm text-gray-600">
+          Blueprint — FocusFlow
+        </p>
+      </div>
+
+      {/* content */}
+      <div className="p-6 md:p-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        {/* Problem */}
+        <div className="rounded-2xl border border-gray-300 bg-white p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-gray-400">
+                Section 1
               </p>
+
+              <h3 className="mt-2 text-xl font-semibold">
+                Problem
+              </h3>
             </div>
 
-            <div className="p-6 space-y-6">
-
-              <div className="rounded-2xl border border-gray-300 bg-white p-6">
-                <h4 className="text-sm uppercase tracking-wide text-gray-500">
-                  Core Features
-                </h4>
-
-                <ul className="mt-4 space-y-3 text-gray-700">
-                  <li>• Async video standups with AI summaries</li>
-                  <li>• Slack + Notion integration</li>
-                  <li>• Team pulse dashboard</li>
-                  <li>• AI-generated blocker detection</li>
-                </ul>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-                <div className="rounded-2xl border border-gray-300 bg-white p-6">
-                  <h4 className="text-sm uppercase tracking-wide text-gray-500">
-                    Tech Stack
-                  </h4>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {[
-                      "Next.js",
-                      "Supabase",
-                      "OpenAI",
-                      "Stripe",
-                      "Vercel"
-                    ].map((tech) => (
-                      <span
-                        key={tech}
-                        className="rounded-full border border-gray-300 px-3 py-1 text-sm"
-                      >
-                        {tech}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-gray-300 bg-white p-6">
-                  <h4 className="text-sm uppercase tracking-wide text-gray-500">
-                    Market Score
-                  </h4>
-
-                  <div className="mt-4 space-y-4">
-
-                    {[
-                      ["Demand", "82%"],
-                      ["Feasibility", "75%"],
-                      ["Competition", "60%"]
-                    ].map(([label, value]) => (
-                      <div key={label}>
-                        <div className="flex justify-between text-sm mb-1">
-                          <span>{label}</span>
-                          <span>{value}</span>
-                        </div>
-
-                        <div className="h-2 rounded-full bg-gray-200 overflow-hidden">
-                          <div
-                            className="h-full bg-black rounded-full"
-                            style={{ width: value }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-
-                  </div>
-                </div>
-
-              </div>
-
+            <div className="h-10 w-10 rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center text-sm">
+              1
             </div>
+          </div>
+
+          <p className="mt-5 text-[15px] leading-7 text-gray-600">
+            Remote teams struggle with fragmented async communication,
+            unclear updates, and low visibility into blockers across projects.
+          </p>
+        </div>
+
+        {/* ICP */}
+        <div className="rounded-2xl border border-gray-300 bg-white p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-gray-400">
+                Section 2
+              </p>
+
+              <h3 className="mt-2 text-xl font-semibold">
+                Ideal Customer
+              </h3>
+            </div>
+
+            <div className="h-10 w-10 rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center text-sm">
+              2
+            </div>
+          </div>
+
+          <p className="mt-5 text-[15px] leading-7 text-gray-600">
+            Startup teams with 8–50 employees operating remotely and using
+            Slack, Notion, and Linear daily.
+          </p>
+        </div>
+
+        {/* MVP */}
+        <div className="rounded-2xl border border-gray-300 bg-white p-6 lg:col-span-2">
+
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-gray-400">
+                Section 5
+              </p>
+
+              <h3 className="mt-2 text-xl font-semibold">
+                MVP Features
+              </h3>
+            </div>
+
+            <div className="h-10 w-10 rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center text-sm">
+              5
+            </div>
+          </div>
+
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+
+            {[
+              "Async video standups with AI summaries",
+              "Slack + Notion integrations",
+              "Team health dashboard",
+              "AI blocker detection",
+            ].map((item) => (
+              <div
+                key={item}
+                className="rounded-xl border border-gray-200 bg-[#fafafa] px-4 py-4 text-sm text-gray-700"
+              >
+                {item}
+              </div>
+            ))}
+
           </div>
         </div>
 
-      </section>
+        {/* Tech stack */}
+        <div className="rounded-2xl border border-gray-300 bg-white p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-gray-400">
+                Stack
+              </p>
 
+              <h3 className="mt-2 text-xl font-semibold">
+                Recommended Stack
+              </h3>
+            </div>
 
+            <div className="h-10 w-10 rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center text-sm">
+              ⚡
+            </div>
+          </div>
 
+          <div className="mt-6 flex flex-wrap gap-2">
+            {[
+              "Next.js",
+              "Supabase",
+              "OpenAI",
+              "Stripe",
+              "Vercel",
+            ].map((tech) => (
+              <span
+                key={tech}
+                className="rounded-full border border-gray-300 px-3 py-1 text-sm bg-[#fafafa]"
+              >
+                {tech}
+              </span>
+            ))}
+          </div>
+        </div>
 
+        {/* Founder advice */}
+        <div className="rounded-2xl border border-gray-300 bg-[#fafaf8] p-6">
+
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-gray-400">
+                Founder Advice
+              </p>
+
+              <h3 className="mt-2 text-xl font-semibold">
+                Strategic Insight
+              </h3>
+            </div>
+
+            <div className="h-10 w-10 rounded-xl border border-gray-200 bg-white flex items-center justify-center text-sm">
+              11
+            </div>
+          </div>
+
+          <p className="mt-5 text-[15px] italic leading-7 text-gray-600">
+            Don’t position this as a “meeting replacement tool.”
+            Position it as a visibility system for fast-moving remote teams.
+          </p>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</section>
 
 
      
