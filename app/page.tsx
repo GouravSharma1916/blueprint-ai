@@ -29,7 +29,7 @@ export default function Home() {
               href="/interview"
               className="inline-flex items-center gap-2 rounded-xl border border-black bg-black px-6 py-3 text-white transition hover:scale-105"
             >
-              Start your blueprint
+Talk to your AI product strategist
               <ArrowRight className="h-4 w-4" />
             </a>
 
