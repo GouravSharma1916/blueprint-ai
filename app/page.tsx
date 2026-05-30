@@ -12,11 +12,11 @@ export default function Home() {
             AI-POWERED PRODUCT PLANNING
           </div>
 
-          <h1 className="mt-8 text-5xl md:text-7xl font-serif leading-tight tracking-tight">
-            Turn your idea into a{" "}
-            <span className="italic">structured blueprint</span>{" "}
-            in minutes
-          </h1>
+         <h1 className="mt-8 text-5xl md:text-7xl font-serif leading-tight tracking-tight">
+  Stop guessing what to build. Get a{" "}
+  <span className="italic">structured product blueprint</span>{" "}
+  in minutes.
+</h1>
 
           <p className="mt-6 text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed">
             We interview you about your idea and generate a complete
