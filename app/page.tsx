@@ -86,7 +86,7 @@ Talk to your AI product strategist
   <div className="max-w-4xl mx-auto text-center">
 
     <p className="text-xs tracking-widest text-gray-400 uppercase">
-      Built for founders, engineers & designers
+      Used By
     </p>
 
     <div className="mt-6 flex items-center justify-center gap-10 flex-wrap">
