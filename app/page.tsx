@@ -61,6 +61,48 @@ Talk to your AI product strategist
 
 
 
+{/* STATS */}
+<section className="py-12 px-6 border-b border-gray-200 bg-white">
+  <div className="max-w-4xl mx-auto grid grid-cols-3 gap-6 text-center">
+
+    {[
+      { number: "50+", label: "Early users tested" },
+      { number: "2 min", label: "Average time to blueprint" },
+      { number: "Founders", label: "Engineers • Designers • Builders" },
+    ].map((stat) => (
+      <div key={stat.label}>
+        <p className="text-4xl font-serif text-black">{stat.number}</p>
+        <p className="mt-2 text-sm text-gray-500">{stat.label}</p>
+      </div>
+    ))}
+
+  </div>
+</section>
+
+
+
+{/* TRUSTED BY */}
+<section className="py-10 px-6 border-b border-gray-200 bg-white">
+  <div className="max-w-4xl mx-auto text-center">
+
+    <p className="text-xs tracking-widest text-gray-400 uppercase">
+      Built for founders, engineers & designers
+    </p>
+
+    <div className="mt-6 flex items-center justify-center gap-10 flex-wrap">
+      {["Solo Founders", "Indie Builders", "Startup Teams", "Product Designers"].map((name) => (
+        <span key={name} className="text-sm font-medium text-gray-400">
+          {name}
+        </span>
+      ))}
+    </div>
+
+  </div>
+</section>
+
+
+
+
 
 
 
