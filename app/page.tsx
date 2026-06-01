@@ -396,6 +396,107 @@ Talk to your AI product strategist
 </section>
 
 
+
+
+
+
+{/* TESTIMONIALS */}
+<section className="py-20 px-6 border-b border-gray-200">
+  <div className="max-w-4xl mx-auto">
+
+    <p className="text-sm tracking-wide text-gray-500 uppercase">
+      What early users say
+    </p>
+
+    <h2 className="mt-4 text-4xl font-serif">
+      Real feedback
+    </h2>
+
+    <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-6">
+
+      {[
+        {
+          quote:
+            "The landing page is clean and the messaging is easy to understand. The concept is genuinely useful for new founders.",
+          name: "Nomita Patwal",
+          role: "Developer & AI Enthusiast, India"
+        },
+        {
+          quote:
+            "UX feedback: the idea is strong, but showing the full workflow from blueprint → build → launch would make it much more powerful.",
+          name: "Cielo Dahy",
+          role: "AI Intern, Buenos Aires, Argentina"
+        },
+        {
+          quote:
+            "Looks super cool. Great idea for first-time founders. UI improvements could make it even more polished.",
+          name: "Arsh Parekh",
+          role: "Princeton University, United States"
+        },
+        {
+          quote:
+            "It's working well and has a clear use case. Just needs more visibility and user feedback loops.",
+          name: "Tanvi Bansal",
+          role: "Technical Business Analyst, India"
+        },
+        {
+          quote:
+            "This is pretty useful for new founders. I can see this becoming valuable if you refine it further.",
+          name: "Arya SK",
+          role: "University of Cambridge, United Kingdom"
+        },
+        {
+          quote:
+            "Really amazing idea! It helps structure thoughts before building, which is exactly what many students need.",
+          name: "Gopisaroja G",
+          role: "Computer Science Student, India"
+        }
+      ].map((t) => (
+        <div
+          key={t.name}
+          className="rounded-3xl border border-gray-200 bg-white p-8"
+        >
+          <p className="text-gray-700 leading-relaxed italic">
+            "{t.quote}"
+          </p>
+
+          <div className="mt-6">
+            <p className="font-medium text-black">{t.name}</p>
+            <p className="text-sm text-gray-500">{t.role}</p>
+          </div>
+        </div>
+      ))}
+
+    </div>
+  </div>
+</section>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
      
       {/* FAQ */}
 <section className="py-20 px-6 border-b border-gray-200">
