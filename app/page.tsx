@@ -67,7 +67,7 @@ Talk to your AI product strategist
 
     {[
       { number: "50+", label: "Early users tested" },
-      { number: "2 min", label: "Average time to blueprint" },
+      { number: "1 min", label: "Average time to blueprint" },
       { number: "Founders", label: "Engineers • Designers • Builders" },
     ].map((stat) => (
       <div key={stat.label}>
