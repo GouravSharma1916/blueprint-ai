@@ -62,7 +62,7 @@ Talk to your AI product strategist
 
 
 {/* STATS */}
-<section className="py-12 px-6 border-b border-gray-200 bg-white">
+<section className="py-12 px-6 border-b border-gray-200 bg-[#f6f5f2]">
   <div className="max-w-4xl mx-auto grid grid-cols-3 gap-6 text-center">
 
     {[
@@ -81,8 +81,9 @@ Talk to your AI product strategist
 
 
 
+
 {/* TRUSTED BY */}
-<section className="py-10 px-6 border-b border-gray-200 bg-white">
+<section className="py-10 px-6 border-b border-gray-200 bg-[#f6f5f2]">
   <div className="max-w-4xl mx-auto text-center">
 
     <p className="text-xs tracking-widest text-gray-400 uppercase">
@@ -91,7 +92,7 @@ Talk to your AI product strategist
 
     <div className="mt-6 flex items-center justify-center gap-10 flex-wrap">
       {["Solo Founders", "Indie Builders", "Startup Teams", "Product Designers"].map((name) => (
-        <span key={name} className="text-sm font-medium text-gray-400">
+        <span key={name} className="text-sm font-medium text-gray-500">
           {name}
         </span>
       ))}
@@ -99,7 +100,6 @@ Talk to your AI product strategist
 
   </div>
 </section>
-
 
 
 
