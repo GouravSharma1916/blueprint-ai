@@ -479,6 +479,59 @@ Talk to your AI product strategist
 
 
 
+{/* ABOUT + FOUNDER */}
+<section className="py-20 px-6 border-b border-gray-200 bg-[#f8f8f7]">
+  <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+
+    {/* About */}
+    <div>
+      <p className="text-sm tracking-wide text-gray-500 uppercase">About</p>
+
+      <h2 className="mt-4 text-4xl font-serif">
+        Built for founders<br />who think before they code
+      </h2>
+
+      <p className="mt-6 text-gray-600 leading-relaxed">
+        Blueprint AI helps founders turn raw ideas into structured product blueprints.
+        It interviews you, understands your concept, and generates a clear execution plan
+        so you start building with clarity instead of guesswork.
+      </p>
+
+      <p className="mt-4 text-gray-600 leading-relaxed">
+        Designed for solo founders, indie builders, and first-time entrepreneurs
+        who want structured thinking before writing a single line of code.
+      </p>
+    </div>
+
+    {/* Founder card */}
+    <div className="rounded-3xl border border-gray-200 bg-white p-8">
+
+      <div className="flex items-center gap-4">
+
+        <div className="h-16 w-16 rounded-full bg-gray-200 flex items-center justify-center text-2xl">
+          👨‍💻
+        </div>
+
+        <div>
+          <p className="font-semibold text-black">Gaurav Sharma</p>
+          <p className="text-sm text-gray-500">Founder, Blueprint AI</p>
+        </div>
+
+      </div>
+
+      <p className="mt-6 text-gray-600 leading-relaxed italic">
+        "I’ve been building apps alone and realized most founders don’t fail in code —
+        they fail before writing code. Blueprint AI is my attempt to fix that first step:
+        thinking clearly before building anything."
+      </p>
+
+    </div>
+
+  </div>
+</section>
+
+
+
 
 
 
