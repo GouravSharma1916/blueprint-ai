@@ -391,7 +391,7 @@ Talk to your AI product strategist
           </a>
 
           <p className="mt-6 text-sm text-gray-400">
-             Built by Krishna AI
+             Built by Blueprint AI
           </p>
 
         </div>
