@@ -126,7 +126,7 @@ Talk to your AI product strategist
               },
               {
                 title: "AI makes it possible",
-                desc: "AI now delivers the structured thinking of a $500/hr product consultant in 2 minutes — without needing to know how to prompt perfectly.",
+                desc: "AI now delivers structured product thinking that used to require a $500/hr product strategist — in minutes, not meetings.",
               },
               {
                 title: "The cost of building wrong",
