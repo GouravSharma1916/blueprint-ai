@@ -59,6 +59,57 @@ Talk to your AI product strategist
 
      
 
+
+
+
+
+
+
+{/* WHY NOW */}
+      <section className="py-20 px-6 border-b border-gray-200">
+        <div className="max-w-4xl mx-auto">
+          <p className="text-sm tracking-wide text-gray-500 uppercase">Why now</p>
+          <h2 className="mt-4 text-4xl md:text-5xl font-serif tracking-tight">
+            The barrier to starting is low.{" "}
+            <span className="italic">
+              The barrier to starting right is still high.
+            </span>
+          </h2>
+ 
+          <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[
+              {
+                title: "More builders than ever",
+                desc: "Solo founders are shipping more than ever — but 90% still skip structured product discovery and build the wrong thing first.",
+              },
+              {
+                title: "AI makes it possible",
+                desc: "AI now delivers the structured thinking of a $500/hr product consultant in 2 minutes — without needing to know how to prompt perfectly.",
+              },
+              {
+                title: "The cost of building wrong",
+                desc: "The average founder wastes 3–6 months building something nobody wanted. Blueprint AI exists to eliminate that first wrong turn.",
+              },
+            ].map((item) => (
+              <div key={item.title} className="rounded-3xl bg-[#efede7] p-8">
+                <h3 className="text-lg font-semibold">{item.title}</h3>
+                <p className="mt-4 text-gray-600 leading-relaxed">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+
+
+
+
+
+
+
+
+
+
       {/* HOW IT WORKS */}
       <section className="py-20 px-6 border-b border-gray-200">
         <div className="max-w-6xl mx-auto">
