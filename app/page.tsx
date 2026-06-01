@@ -68,7 +68,7 @@ Talk to your AI product strategist
     {[
       { number: "50+", label: "Early users tested" },
       { number: "1 min", label: "Average time to blueprint" },
-      { number: "Founders", label: "Engineers • Designers • Builders" },
+      { number: "4+ countries", label: "Global reach" },
     ].map((stat) => (
       <div key={stat.label}>
         <p className="text-4xl font-serif text-black">{stat.number}</p>
