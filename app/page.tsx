@@ -520,8 +520,9 @@ Talk to your AI product strategist
       </div>
 
       <p className="mt-6 text-gray-600 leading-relaxed italic">
-        "Most ideas don’t fail because of execution — they fail because of unclear thinking at the start.
-        I built Blueprint AI to help builders structure their thinking before they build anything."
+        "I’ve been building apps alone and realized most founders, engineers, product managers, designers don’t fail in code —
+        they fail before writing code. Blueprint AI is my attempt to fix that first step:
+        thinking clearly before building anything."
       </p>
 
     </div>
