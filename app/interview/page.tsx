@@ -40,12 +40,13 @@ const questions = [
 export default function Interview() {
   const router = useRouter();
 
-  const [step, setStep]       = useState(0);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [input, setInput]     = useState("");
-  const [animKey, setAnimKey] = useState(0);
-  const [shaking, setShaking] = useState(false);
-  const textareaRef           = useRef<HTMLTextAreaElement>(null);
+  const [step, setStep]           = useState(0);
+  const [answers, setAnswers]     = useState<Record<string, string>>({});
+  const [input, setInput]         = useState("");
+  const [animKey, setAnimKey]     = useState(0);
+  const [shaking, setShaking]     = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const textareaRef               = useRef<HTMLTextAreaElement>(null);
 
   const current  = questions[step];
   const stepNum  = String(step + 1).padStart(2, "0");
@@ -66,8 +67,10 @@ export default function Interview() {
       setAnimKey((k) => k + 1);
       setTimeout(() => textareaRef.current?.focus(), 50);
     } else {
+      // Show loading screen before redirect
+      setSubmitting(true);
       sessionStorage.setItem("blueprint-input", JSON.stringify(updated));
-      router.push("/blueprint");
+      setTimeout(() => router.push("/blueprint"), 1800);
     }
   }
 
@@ -77,6 +80,43 @@ export default function Interview() {
     setInput(answers[questions[prev].key] ?? "");
     setStep(prev);
     setAnimKey((k) => k + 1);
+  }
+
+  if (submitting) {
+    return (
+      <main style={{ minHeight:"100vh", background:"#111", display:"flex", alignItems:"center", justifyContent:"center", padding:"24px", fontFamily:"'DM Sans', sans-serif" }}>
+        <div style={{ textAlign:"center", maxWidth:"380px", width:"100%" }}>
+          <div style={{ width:56, height:56, background:"#fff", borderRadius:16, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 28px" }}>
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+              <rect width="28" height="28" rx="8" fill="white"/>
+              <path d="M8 14h12M14 8v12" stroke="#111" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+          </div>
+          <h2 style={{ fontFamily:"'Instrument Serif', serif", fontSize:28, fontWeight:400, color:"#fff", marginBottom:10 }}>
+            Building your blueprint…
+          </h2>
+          <p style={{ fontSize:14, color:"#888", lineHeight:1.7, marginBottom:32 }}>
+            Analysing your answers. This takes just a moment.
+          </p>
+          <div style={{ width:"100%", height:2, background:"#333", borderRadius:99, overflow:"hidden", marginBottom:32 }}>
+            <div style={{ height:"100%", background:"linear-gradient(90deg,#555,#fff)", borderRadius:99, animation:"barSlide 1.8s ease forwards" }} />
+          </div>
+          <div style={{ display:"flex", flexDirection:"column", gap:14, textAlign:"left" }}>
+            {["Understanding your idea","Identifying your market","Designing your blueprint"].map((label, i) => (
+              <div key={label} style={{ display:"flex", alignItems:"center", gap:12, fontSize:13, color:"#666", opacity:0, animation:`stepIn 0.4s ease ${i*500}ms forwards` }}>
+                <span style={{ width:6, height:6, borderRadius:"50%", background:"#555", flexShrink:0, display:"inline-block" }} />
+                {label}
+              </div>
+            ))}
+          </div>
+        </div>
+        <style>{\`
+          @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap');
+          @keyframes barSlide { from { width:0% } to { width:100% } }
+          @keyframes stepIn { from { opacity:0; transform:translateX(-8px) } to { opacity:1; transform:translateX(0) } }
+        \`}</style>
+      </main>
+    );
   }
 
   return (
