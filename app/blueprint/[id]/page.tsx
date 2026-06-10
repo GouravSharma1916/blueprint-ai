@@ -1,69 +1,26 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { useAuth } from "@clerk/nextjs";
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+import Link from "next/link";
 
-type Stage = "thinking" | "generating" | "finalizing" | "done" | "error";
 type Confidence = "High" | "Medium" | "Low";
-
-interface BlueprintScore {
-  value: number;
-  confidence: Confidence;
-  reason: string;
-}
-
-interface BlueprintSection {
-  number: number;
-  title: string;
-  content: string;
-}
-
-interface Blueprint {
-  score: BlueprintScore;
-  sections: BlueprintSection[];
-}
+interface BlueprintScore { value: number; confidence: Confidence; reason: string; }
+interface BlueprintSection { number: number; title: string; content: string; }
+interface Blueprint { score: BlueprintScore; sections: BlueprintSection[]; }
 
 const SECTION_META: Record<number, { icon: string; accent?: string }> = {
-  1:  { icon: "🎯" },
-  2:  { icon: "👤" },
-  3:  { icon: "💡" },
-  4:  { icon: "⚔️" },
-  5:  { icon: "⏱️" },
-  6:  { icon: "🛠️" },
-  7:  { icon: "✅" },
-  8:  { icon: "⚠️", accent: "risk" },
-  9:  { icon: "🗣️" },
-  10: { icon: "📅" },
-  11: { icon: "🧭", accent: "founder" },
+  1:{icon:"🎯"},2:{icon:"👤"},3:{icon:"💡"},4:{icon:"⚔️"},5:{icon:"⏱️"},
+  6:{icon:"🛠️"},7:{icon:"✅"},8:{icon:"⚠️",accent:"risk"},
+  9:{icon:"🗣️"},10:{icon:"📅"},11:{icon:"🧭",accent:"founder"},
 };
-
-const STAGE_COPY: Record<string, { title: string; desc: string }> = {
-  thinking:   { title: "Thinking like a founder", desc: "Evaluating your market, users, and startup opportunity." },
-  generating: { title: "Building your blueprint", desc: "Designing your MVP, validation plan, and execution strategy." },
-  finalizing: { title: "Finalizing output", desc: "Structuring everything into an actionable startup blueprint." },
-  error:      { title: "Something went wrong", desc: "Please go back and try again." },
-};
-
-const STAGE_PROGRESS: Record<string, number> = {
-  thinking: 20, generating: 60, finalizing: 90, done: 100, error: 0,
-};
-
-function parseBlueprint(raw: string): Blueprint | null {
-  try {
-    const clean = raw.replace(/```json|```/g, "").trim();
-    return JSON.parse(clean) as Blueprint;
-  } catch {
-    return null;
-  }
-}
 
 function renderContent(content: string, accent?: string) {
   if (accent === "founder") {
     const doNotMatch = content.match(/([\s\S]*?)(Do Not Build This If[:\s]*)([\s\S]*)/i);
     if (doNotMatch) {
       const before = doNotMatch[1].trim();
-      const doNotSection = doNotMatch[3].trim();
-      const doNotLines = doNotSection.split("\n").filter(Boolean);
+      const doNotLines = doNotMatch[3].trim().split("\n").filter(Boolean);
       return (
         <>
           {before && <p className="section-para" style={{ marginBottom: "16px" }}>{before}</p>}
@@ -88,51 +45,6 @@ function renderContent(content: string, accent?: string) {
     );
   }
   return <>{lines.map((l, i) => <p key={i} className="section-para">{l}</p>)}</>;
-}
-
-function LoadingScreen({ stage }: { stage: Stage }) {
-  const copy = STAGE_COPY[stage] ?? STAGE_COPY.thinking;
-  const progress = STAGE_PROGRESS[stage] ?? 0;
-  return (
-    <main className="loading-root">
-      <div className="loading-card">
-        <div className="loading-logo">
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-            <rect width="28" height="28" rx="8" fill="currentColor" />
-            <path d="M8 14h12M14 8v12" stroke="white" strokeWidth="2" strokeLinecap="round" />
-          </svg>
-        </div>
-        <div className="progress-track">
-          <div className="progress-fill" style={{ width: `${progress}%` }} />
-        </div>
-        <div className="loading-text">
-          <h2 className="loading-title" style={{ color: stage === "error" ? "#dc2626" : undefined }}>{copy.title}</h2>
-          <p className="loading-desc">{copy.desc}</p>
-        </div>
-        {stage !== "error" && (
-          <div className="loading-dots">
-            <span className="dot" style={{ animationDelay: "0ms" }} />
-            <span className="dot" style={{ animationDelay: "160ms" }} />
-            <span className="dot" style={{ animationDelay: "320ms" }} />
-          </div>
-        )}
-        {stage === "error" && <a href="/interview" className="retry-btn">← Back to interview</a>}
-      </div>
-      <style>{`
-        .loading-root { min-height:100vh; background:#f8f8f7; display:flex; align-items:center; justify-content:center; padding:24px; font-family:'DM Sans',sans-serif; }
-        .loading-card { background:#fff; border:1px solid #e8e8e5; border-radius:20px; padding:48px 40px; width:100%; max-width:400px; text-align:center; }
-        .loading-logo { width:52px; height:52px; border-radius:14px; background:#111; color:#111; display:flex; align-items:center; justify-content:center; margin:0 auto 28px; }
-        .progress-track { width:100%; height:3px; background:#efefed; border-radius:99px; overflow:hidden; margin-bottom:28px; }
-        .progress-fill { height:100%; background:#111; border-radius:99px; transition:width 0.6s ease; }
-        .loading-title { font-size:20px; font-weight:600; color:#111; margin-bottom:10px; }
-        .loading-desc { font-size:14px; color:#888; line-height:1.7; }
-        .loading-dots { display:flex; align-items:center; justify-content:center; gap:6px; margin-top:28px; }
-        .dot { width:6px; height:6px; border-radius:50%; background:#ccc; animation:blink 1.2s ease-in-out infinite; }
-        @keyframes blink { 0%,80%,100%{opacity:0.3} 40%{opacity:1} }
-        .retry-btn { display:inline-block; margin-top:24px; font-size:13px; font-weight:500; color:#111; text-decoration:none; border:1px solid #e0e0dd; border-radius:99px; padding:8px 20px; }
-      `}</style>
-    </main>
-  );
 }
 
 function ScoreCard({ score }: { score: BlueprintScore }) {
@@ -164,11 +76,9 @@ function ScoreCard({ score }: { score: BlueprintScore }) {
 
 function SectionCard({ section, delay }: { section: BlueprintSection; delay: number }) {
   const meta = SECTION_META[section.number] ?? { icon: "📄" };
-  const isFounder = meta.accent === "founder";
-  const isRisk = meta.accent === "risk";
   return (
     <div
-      className={`section-card ${isFounder ? "section-card--founder" : ""} ${isRisk ? "section-card--risk" : ""}`}
+      className={`section-card ${meta.accent === "founder" ? "section-card--founder" : ""} ${meta.accent === "risk" ? "section-card--risk" : ""}`}
       style={{ animationDelay: `${delay}ms` }}
     >
       <div className="section-header">
@@ -266,7 +176,6 @@ async function generatePDF(blueprint: Blueprint) {
   for (const section of blueprint.sections) {
     checkPageBreak(24);
 
-    // section number pill
     doc.setFillColor(17, 17, 17);
     doc.roundedRect(margin, y, 18, 7, 2, 2, "F");
     doc.setFontSize(7);
@@ -274,7 +183,6 @@ async function generatePDF(blueprint: Blueprint) {
     doc.setFont("helvetica", "bold");
     doc.text(`  ${section.number}`, margin + 1, y + 5);
 
-    // section title
     doc.setFontSize(12);
     doc.setTextColor(17, 17, 17);
     doc.setFont("helvetica", "bold");
@@ -282,12 +190,10 @@ async function generatePDF(blueprint: Blueprint) {
     doc.text(titleLines, margin + 22, y + 5.5);
     y += 12;
 
-    // divider
     doc.setDrawColor(230, 230, 228);
     doc.line(margin, y, margin + contentWidth, y);
     y += 5;
 
-    // content
     const contentLines = section.content.split("\n").filter(Boolean);
     const isList = contentLines.length > 1 && contentLines.every(l => /^[-•*\d]/.test(l.trim()));
 
@@ -306,11 +212,10 @@ async function generatePDF(blueprint: Blueprint) {
     } else {
       addText(section.content, 9, [68, 68, 68], false, 0);
     }
-
     y += 8;
   }
 
-  // ── FOOTER on every page ──
+  // ── FOOTER ──
   const total = doc.getNumberOfPages();
   for (let i = 1; i <= total; i++) {
     doc.setPage(i);
@@ -326,77 +231,31 @@ async function generatePDF(blueprint: Blueprint) {
   doc.save("blueprint.pdf");
 }
 
-export default function BlueprintPage() {
-  const [loading, setLoading]         = useState(true);
-  const [stage, setStage]             = useState<Stage>("thinking");
-  const [blueprint, setBlueprint]     = useState<Blueprint | null>(null);
-  const [saved, setSaved]             = useState(false);
-  const [showModal, setShowModal]     = useState(false);
-  const [pdfLoading, setPdfLoading]   = useState(false);
-  const saveAttempted                 = useRef(false);
-  const { isSignedIn, isLoaded }      = useAuth();
+export default function SavedBlueprintPage() {
+  const { id } = useParams();
+  const [blueprint, setBlueprint]   = useState<Blueprint | null>(null);
+  const [loading, setLoading]       = useState(true);
+  const [notFound, setNotFound]     = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   useEffect(() => {
-    if (!isLoaded || !blueprint || saved || saveAttempted.current) return;
-    if (isSignedIn) { saveAttempted.current = true; autoSave(blueprint); }
-  }, [blueprint, isSignedIn, isLoaded, saved]);
-
-  async function autoSave(bp: Blueprint) {
-    try {
-      const answers = sessionStorage.getItem("blueprint-input");
-      const res = await fetch("/api/save-blueprint", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers, blueprint: bp, score: bp?.score?.value }),
-      });
-      if (res.ok) setSaved(true);
-    } catch { /* silent */ }
-  }
-
-  useEffect(() => {
-    const raw = sessionStorage.getItem("blueprint-input");
-    if (!raw) { setStage("error"); setLoading(false); return; }
-
-    const cached = sessionStorage.getItem("blueprint-output");
-    if (cached) {
-      const parsed = parseBlueprint(cached);
-      if (parsed) { setBlueprint(parsed); setStage("done"); setLoading(false); return; }
-    }
-
-    async function generateBlueprint() {
+    async function load() {
       try {
-        setStage("thinking");
-        await new Promise((r) => setTimeout(r, 900));
-        setStage("generating");
-        const res = await fetch("/api/blueprint", {
-          method: "POST", headers: { "Content-Type": "application/json" }, body: raw,
-        });
+        const res = await fetch(`/api/get-blueprints?id=${id}`);
         const data = await res.json();
-        if (!res.ok || data.error) { setStage("error"); setLoading(false); return; }
-        setStage("finalizing");
-        await new Promise((r) => setTimeout(r, 600));
-        const bp: string = data.blueprint;
-        const parsed = parseBlueprint(bp);
-        if (!parsed) { setStage("error"); setLoading(false); return; }
-        sessionStorage.setItem("blueprint-output", bp);
-        setBlueprint(parsed);
-        setStage("done");
-      } catch { setStage("error"); }
+        if (!data.blueprint) { setNotFound(true); return; }
+        setBlueprint(data.blueprint.blueprint);
+      } catch { setNotFound(true); }
       finally { setLoading(false); }
     }
-    generateBlueprint();
-  }, []);
+    if (id) load();
+  }, [id]);
 
   function handleCopy() {
     if (!blueprint) return;
     navigator.clipboard.writeText(
       blueprint.sections.map((s) => `${s.number}. ${s.title}\n${s.content}`).join("\n\n")
     ).catch(() => {});
-  }
-
-  function handleRegenerate() {
-    sessionStorage.removeItem("blueprint-output");
-    window.location.reload();
   }
 
   async function handleDownloadPDF() {
@@ -406,17 +265,39 @@ export default function BlueprintPage() {
     finally { setPdfLoading(false); }
   }
 
-  if (loading || stage !== "done") return <LoadingScreen stage={stage} />;
-  if (!blueprint) return <LoadingScreen stage="error" />;
+  if (loading) return (
+    <main style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", background:"#f8f8f7", fontFamily:"DM Sans,sans-serif" }}>
+      <div style={{ textAlign:"center" }}>
+        <div style={{ width:28, height:28, border:"2px solid #e0e0dd", borderTopColor:"#111", borderRadius:"50%", animation:"spin 0.7s linear infinite", margin:"0 auto 16px" }} />
+        <p style={{ color:"#888", fontSize:14 }}>Loading blueprint...</p>
+      </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </main>
+  );
+
+  if (notFound || !blueprint) return (
+    <main style={{ minHeight:"100vh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", background:"#f8f8f7", fontFamily:"DM Sans,sans-serif", gap:16 }}>
+      <p style={{ color:"#888", fontSize:15 }}>Blueprint not found.</p>
+      <Link href="/dashboard" style={{ fontSize:13, color:"#111", textDecoration:"none", border:"1px solid #e0e0dd", borderRadius:99, padding:"8px 20px" }}>← Back to dashboard</Link>
+    </main>
+  );
 
   return (
     <main className="bp-root">
+
+      <nav className="bp-nav">
+        <div className="bp-nav-inner">
+          <Link href="/" className="bp-nav-logo">Blueprint AI</Link>
+          <div className="bp-nav-right">
+            <Link href="/dashboard" className="bp-nav-link">← Dashboard</Link>
+            <Link href="/interview" className="bp-nav-btn">+ New blueprint</Link>
+          </div>
+        </div>
+      </nav>
+
       <div className="bp-hero">
         <div className="bp-hero-inner">
-          <div className="status-badge">
-            <span className="status-dot" />
-            {saved ? "Blueprint saved to your dashboard" : "AI-generated startup blueprint"}
-          </div>
+          <div className="status-badge"><span className="status-dot" />Saved blueprint</div>
           <h1 className="bp-hero-title">Your product blueprint</h1>
           <p className="bp-hero-sub">Structured founder thinking — problem, customers, MVP, validation, risks, and a 30-day execution plan.</p>
           <div className="bp-hero-actions">
@@ -426,29 +307,16 @@ export default function BlueprintPage() {
               Copy blueprint
             </button>
 
-            <button className="action-btn" onClick={handleRegenerate}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-              Regenerate
-            </button>
-
             <button className="action-btn" onClick={handleDownloadPDF} disabled={pdfLoading}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               {pdfLoading ? "Generating..." : "Download PDF"}
             </button>
 
-            <a href="/interview" className="action-btn">
+            <Link href="/dashboard" className="action-btn">← Back to dashboard</Link>
+            <Link href="/interview" className="action-btn">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               New blueprint
-            </a>
-
-            {saved ? (
-              <a href="/dashboard" className="action-btn save-btn">View in Dashboard →</a>
-            ) : !isSignedIn ? (
-              <button className="action-btn save-btn" onClick={() => setShowModal(true)}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                Save blueprint
-              </button>
-            ) : null}
+            </Link>
 
           </div>
         </div>
@@ -470,27 +338,22 @@ export default function BlueprintPage() {
 
       <div className="bp-footer">
         <p>Generated by Blueprint AI · Not financial or legal advice</p>
-        <a href="/interview">Start a new blueprint →</a>
+        <Link href="/interview">Start a new blueprint →</Link>
       </div>
-
-      {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
-            <p className="modal-title">Save your blueprint</p>
-            <p className="modal-sub">Create a free account — your blueprint will be saved automatically after sign up.</p>
-            <div className="modal-actions">
-              <a href="/sign-up?redirect_url=/blueprint" className="modal-btn-primary">Create free account</a>
-              <button className="modal-btn-secondary" onClick={() => setShowModal(false)}>Continue as guest</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap');
         * { box-sizing: border-box; }
         .bp-root { min-height:100vh; background:#f8f8f7; font-family:'DM Sans',sans-serif; color:#111; }
-        .bp-hero { background:#fff; border-bottom:1px solid #e8e8e5; padding:56px 24px 40px; }
+        .bp-nav { background:#fff; border-bottom:1px solid #e8e8e5; padding:0 24px; height:60px; display:flex; align-items:center; }
+        .bp-nav-inner { max-width:720px; width:100%; margin:0 auto; display:flex; align-items:center; justify-content:space-between; }
+        .bp-nav-logo { font-size:16px; font-weight:600; color:#111; text-decoration:none; }
+        .bp-nav-right { display:flex; align-items:center; gap:12px; }
+        .bp-nav-link { font-size:13px; color:#666; text-decoration:none; transition:color 0.15s; }
+        .bp-nav-link:hover { color:#111; }
+        .bp-nav-btn { font-size:13px; font-weight:500; color:#fff; background:#111; border-radius:99px; padding:7px 16px; text-decoration:none; transition:background 0.15s; }
+        .bp-nav-btn:hover { background:#333; }
+        .bp-hero { background:#fff; border-bottom:1px solid #e8e8e5; padding:48px 24px 36px; }
         .bp-hero-inner { max-width:720px; margin:0 auto; }
         .status-badge { display:inline-flex; align-items:center; gap:7px; font-size:12px; font-weight:500; color:#166534; background:#dcfce7; border-radius:99px; padding:5px 14px; margin-bottom:20px; }
         .status-dot { width:6px; height:6px; border-radius:50%; background:#16a34a; }
@@ -500,8 +363,6 @@ export default function BlueprintPage() {
         .action-btn { display:inline-flex; align-items:center; gap:7px; font-family:'DM Sans',sans-serif; font-size:13px; font-weight:500; color:#444; background:#fff; border:1px solid #e0e0dd; border-radius:99px; padding:8px 16px; cursor:pointer; text-decoration:none; transition:background 0.15s,border-color 0.15s; }
         .action-btn:hover { background:#f4f4f2; border-color:#ccc; }
         .action-btn:disabled { opacity:0.6; cursor:not-allowed; }
-        .save-btn { background:#111; color:#fff; border-color:#111; }
-        .save-btn:hover { background:#333; border-color:#333; }
         .bp-meta-bar { display:flex; align-items:center; gap:12px; max-width:720px; margin:24px auto 0; padding:0 24px; }
         .meta-pill { font-size:12px; font-weight:500; color:#555; background:#efefed; border-radius:99px; padding:4px 12px; }
         .meta-divider { width:1px; height:14px; background:#ddd; }
@@ -545,20 +406,12 @@ export default function BlueprintPage() {
         .bp-footer p { font-size:12px; color:#bbb; }
         .bp-footer a { font-size:13px; font-weight:500; color:#111; text-decoration:none; }
         .bp-footer a:hover { text-decoration:underline; }
-        .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center; z-index:100; padding:24px; }
-        .modal-box { background:#fff; border-radius:20px; padding:32px; max-width:380px; width:100%; text-align:center; }
-        .modal-title { font-size:20px; font-weight:600; color:#111; margin-bottom:8px; }
-        .modal-sub { font-size:14px; color:#666; line-height:1.6; margin-bottom:24px; }
-        .modal-actions { display:flex; flex-direction:column; gap:10px; }
-        .modal-btn-primary { display:block; background:#111; color:#fff; border-radius:99px; padding:12px; font-size:14px; font-weight:500; text-decoration:none; transition:background 0.15s; }
-        .modal-btn-primary:hover { background:#333; }
-        .modal-btn-secondary { background:none; border:1px solid #e0e0dd; border-radius:99px; padding:12px; font-size:14px; color:#666; cursor:pointer; transition:background 0.15s; }
-        .modal-btn-secondary:hover { background:#f4f4f2; }
         @media (max-width:600px) {
-          .bp-hero { padding:40px 20px 32px; }
+          .bp-hero { padding:32px 16px 28px; }
           .section-card { padding:22px 18px 20px; }
           .bp-sections { padding:16px 16px 40px; }
           .score-card { flex-direction:column; gap:16px; }
+          .bp-nav-right { gap:8px; }
         }
       `}</style>
     </main>
