@@ -229,8 +229,10 @@ REMINDER BEFORE YOU RESPOND:
     }
 
     const data = await response.json();
-const raw: string = data.choices[0].message.content;
+    const raw: string = data.choices[0].message.content;
 
+console.log("=== TOKEN USAGE ===");
+console.log(JSON.stringify(data.usage));
 console.log("=== RAW MODEL OUTPUT (first 500 chars) ===");
 console.log(raw.slice(0, 500));
 console.log("=== RAW MODEL OUTPUT (last 200 chars) ===");
