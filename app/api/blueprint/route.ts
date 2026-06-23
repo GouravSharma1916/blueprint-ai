@@ -203,7 +203,8 @@ REMINDER BEFORE YOU RESPOND:
 - Is the output valid JSON with no markdown or backticks? If not, fix it.
 `;
 
-    const response = await fetch(
+    // Request a STREAMED response from OpenRouter instead of waiting for the full completion
+    const upstream = await fetch(
       "https://openrouter.ai/api/v1/chat/completions",
       {
         method: "POST",
@@ -215,12 +216,13 @@ REMINDER BEFORE YOU RESPOND:
           model: "deepseek/deepseek-chat",
           messages: [{ role: "user", content: prompt }],
           temperature: 0.6,
+          stream: true, // <-- the only change that matters to OpenRouter itself
         }),
       }
     );
 
-    if (!response.ok) {
-      const err = await response.text();
+    if (!upstream.ok || !upstream.body) {
+      const err = await upstream.text().catch(() => "");
       console.error("OpenRouter error:", err);
       return Response.json(
         { success: false, error: "Upstream model error" },
@@ -228,28 +230,38 @@ REMINDER BEFORE YOU RESPOND:
       );
     }
 
-    const data = await response.json();
-    const raw: string = data.choices[0].message.content;
+    // Re-stream OpenRouter's SSE chunks straight through to the browser.
+    // The browser-side code (blueprint/page.tsx) parses these chunks
+    // and accumulates the text as it arrives, instead of waiting ~70s for
+    // a single JSON blob.
+    const reader = upstream.body.getReader();
 
-console.log("=== TOKEN USAGE ===");
-console.log(JSON.stringify(data.usage));
-console.log("=== RAW MODEL OUTPUT (first 500 chars) ===");
-console.log(raw.slice(0, 500));
-console.log("=== RAW MODEL OUTPUT (last 200 chars) ===");
-console.log(raw.slice(-200));
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            controller.enqueue(value);
+          }
+          controller.close();
+        } catch (err) {
+          console.error("Stream relay error:", err);
+          controller.error(err);
+        }
+      },
+      cancel() {
+        reader.cancel();
+      },
+    });
 
-const clean = raw.replace(/```json|```/g, "").trim();
-    try {
-      JSON.parse(clean);
-    } catch {
-      console.error("Model returned invalid JSON:", clean);
-      return Response.json(
-        { success: false, error: "Invalid blueprint format" },
-        { status: 500 }
-      );
-    }
-
-    return Response.json({ blueprint: clean });
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+      },
+    });
 
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";

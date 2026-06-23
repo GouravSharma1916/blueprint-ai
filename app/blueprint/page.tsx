@@ -97,16 +97,9 @@ const SECTION_META: Record<number, { icon: string; accent?: string }> = {
   11: { icon: "🧭", accent: "founder" },
 };
 
-const STAGE_COPY: Record<string, { title: string; desc: string }> = {
-  thinking:   { title: "Thinking like a founder", desc: "Evaluating your market, users, and startup opportunity." },
-  generating: { title: "Building your blueprint", desc: "Designing your MVP, validation plan, and execution strategy." },
-  finalizing: { title: "Finalizing output", desc: "Structuring everything into an actionable startup blueprint." },
-  error:      { title: "Something went wrong", desc: "Please go back and try again." },
-};
-
-const STAGE_PROGRESS: Record<string, number> = {
-  thinking: 20, generating: 60, finalizing: 90, done: 100, error: 0,
-};
+// Stage transitions still drive which screen renders, but the loading
+// copy itself now lives inside LoadingScreen (rotating messages + checklist)
+// rather than one static line per stage.
 
 function parseBlueprint(raw: string): Blueprint | null {
   try {
@@ -115,6 +108,52 @@ function parseBlueprint(raw: string): Blueprint | null {
   } catch {
     return null;
   }
+}
+
+// Best-effort partial parse: while the JSON is still streaming in and
+// incomplete, we can't JSON.parse the whole thing yet. But we CAN pull out
+// the score block early with a regex once it's appeared, so the user sees
+// something concrete within a few seconds instead of a blank loader.
+function tryExtractPartialScore(raw: string): BlueprintScore | null {
+  const clean = raw.replace(/```json|```/g, "");
+  const match = clean.match(/"score"\s*:\s*\{[^}]*"value"\s*:\s*([\d.]+)[^}]*"confidence"\s*:\s*"(High|Medium|Low)"/);
+  if (!match) return null;
+  const reasonMatch = clean.match(/"reason"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  return {
+    value: parseFloat(match[1]),
+    confidence: match[2] as Confidence,
+    reason: reasonMatch ? reasonMatch[1].replace(/\\"/g, '"') : "",
+  };
+}
+
+// Detects how far the stream has progressed so the loading screen can show
+// a live checklist instead of one static message the whole time.
+const KNOWN_SECTION_TITLES = [
+  "Startup Summary", "Ideal Customer Profile", "Problem Analysis",
+  "Why Existing Solutions Fail", "Market Timing", "MVP Scope",
+  "Validation Plan", "Biggest Risks", "Customer Interview Questions",
+  "30-Day Execution Plan", "Founder Recommendation", "Competitor Landscape",
+];
+
+interface StreamProgress {
+  hasScore: boolean;
+  hasBuildEstimate: boolean;
+  hasGtmStrategy: boolean;
+  sectionsSeen: number;
+}
+
+function analyzeStreamProgress(raw: string): StreamProgress {
+  const clean = raw.replace(/```json|```/g, "");
+  let sectionsSeen = 0;
+  for (const title of KNOWN_SECTION_TITLES) {
+    if (clean.includes(`"${title}"`)) sectionsSeen++;
+  }
+  return {
+    hasScore: /"score"\s*:\s*\{[^}]*"confidence"/.test(clean),
+    hasBuildEstimate: clean.includes('"recommendedStack"'),
+    hasGtmStrategy: clean.includes('"gtmRisks"'),
+    sectionsSeen,
+  };
 }
 
 function renderContent(content: string, accent?: string) {
@@ -149,46 +188,210 @@ function renderContent(content: string, accent?: string) {
   return <>{lines.map((l, i) => <p key={i} className="section-para">{l}</p>)}</>;
 }
 
-function LoadingScreen({ stage }: { stage: Stage }) {
-  const copy = STAGE_COPY[stage] ?? STAGE_COPY.thinking;
-  const progress = STAGE_PROGRESS[stage] ?? 0;
+const ROTATING_MESSAGES = [
+  "Reading your idea closely...",
+  "Checking who actually has this problem...",
+  "Sizing up the competition...",
+  "Running the numbers on build time...",
+  "Mapping your first 100 users...",
+  "Stress-testing your differentiation...",
+  "Writing the honest verdict...",
+];
+
+function useRotatingMessage(active: boolean, intervalMs = 2600) {
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    if (!active) return;
+    const id = setInterval(() => {
+      setIndex((i) => (i + 1) % ROTATING_MESSAGES.length);
+    }, intervalMs);
+    return () => clearInterval(id);
+  }, [active]);
+  return ROTATING_MESSAGES[index];
+}
+
+const CHECKLIST_ITEMS = [
+  { key: "score", label: "Score & verdict" },
+  { key: "buildEstimate", label: "Build time estimate" },
+  { key: "gtmStrategy", label: "Go-to-market strategy" },
+  { key: "sections", label: "12-section deep dive" },
+];
+
+function LoadingScreen({
+  stage,
+  partialScore,
+  progress,
+}: {
+  stage: Stage;
+  partialScore: BlueprintScore | null;
+  progress: StreamProgress;
+}) {
+  const rotatingMessage = useRotatingMessage(stage === "generating");
+
+  // Drives a smooth, ever-creeping progress bar that never fully stalls,
+  // even between real signals from the stream — small jitter keeps it
+  // feeling alive instead of frozen on one percentage for 20+ seconds.
+  const [smoothPct, setSmoothPct] = useState(6);
+  const targetPct =
+    stage === "error" ? 0 :
+    stage === "thinking" ? 8 :
+    stage === "finalizing" || stage === "done" ? 100 :
+    Math.min(
+      92,
+      10 +
+        (progress.hasScore ? 12 : 0) +
+        (progress.hasBuildEstimate ? 16 : 0) +
+        (progress.hasGtmStrategy ? 16 : 0) +
+        progress.sectionsSeen * 4
+    );
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setSmoothPct((p) => {
+        if (p < targetPct) return Math.min(targetPct, p + Math.max(0.3, (targetPct - p) * 0.08));
+        if (stage === "generating" && p < 92) return p + 0.05; // gentle creep so it never looks stuck
+        return p;
+      });
+    }, 80);
+    return () => clearInterval(id);
+  }, [targetPct, stage]);
+
+  const checklistState = (key: string) => {
+    if (key === "score") return progress.hasScore;
+    if (key === "buildEstimate") return progress.hasBuildEstimate;
+    if (key === "gtmStrategy") return progress.hasGtmStrategy;
+    if (key === "sections") return progress.sectionsSeen >= KNOWN_SECTION_TITLES.length;
+    return false;
+  };
+
   return (
     <main className="loading-root">
       <div className="loading-card">
-        <div className="loading-logo">
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-            <rect width="28" height="28" rx="8" fill="currentColor" />
-            <path d="M8 14h12M14 8v12" stroke="white" strokeWidth="2" strokeLinecap="round" />
+        <div className="node-diagram-wrap">
+          <svg viewBox="0 0 200 200" fill="none" className="node-diagram" aria-hidden="true">
+            <circle cx="100" cy="100" r="74" stroke="#e3e2dd" strokeWidth="1" strokeDasharray="2 5" className={stage !== "error" ? "node-orbit" : ""} />
+            <path d="M100 26v32M174 100h-32M100 174v-32M26 100h32M148.3 51.7l-22.6 22.6M148.3 148.3l-22.6-22.6M51.7 148.3l22.6-22.6M51.7 51.7l22.6 22.6" stroke="#e3e2dd" strokeWidth="1" className="node-flow-dash" />
+            {[0, 1, 2, 3, 4, 5].map((i) => {
+              const angle = (i / 6) * 2 * Math.PI - Math.PI / 2;
+              const cx = 100 + 64 * Math.cos(angle);
+              const cy = 100 + 64 * Math.sin(angle);
+              return (
+                <circle
+                  key={i}
+                  cx={cx}
+                  cy={cy}
+                  r="6"
+                  fill="#fff"
+                  stroke="#111"
+                  strokeWidth="1"
+                  className={stage !== "error" ? "node-pulse" : ""}
+                  style={{ animationDelay: `${i * -0.45}s` }}
+                />
+              );
+            })}
+            <rect x="84" y="84" width="32" height="32" rx="9" fill="#111" />
+            <path d="M93 100h14M100 93v14" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
           </svg>
         </div>
-        <div className="progress-track">
-          <div className="progress-fill" style={{ width: `${progress}%` }} />
-        </div>
-        <div className="loading-text">
-          <h2 className="loading-title" style={{ color: stage === "error" ? "#dc2626" : undefined }}>{copy.title}</h2>
-          <p className="loading-desc">{copy.desc}</p>
-        </div>
-        {stage !== "error" && (
-          <div className="loading-dots">
-            <span className="dot" style={{ animationDelay: "0ms" }} />
-            <span className="dot" style={{ animationDelay: "160ms" }} />
-            <span className="dot" style={{ animationDelay: "320ms" }} />
+
+        {partialScore && stage !== "error" && (
+          <div className="partial-score-peek">
+            <span className="partial-score-value">{partialScore.value}</span>
+            <span className="partial-score-denom">/10</span>
+            <span className="partial-score-label">score forming</span>
           </div>
         )}
+
+        <div className="loading-text">
+          <h2
+            key={stage}
+            className="loading-title"
+            style={{ color: stage === "error" ? "#dc2626" : undefined }}
+          >
+            {stage === "error" ? "Something went wrong" : "Building your blueprint"}
+          </h2>
+          <p key={rotatingMessage} className="loading-desc loading-desc-rotating">
+            {stage === "error" ? "Please go back and try again." : rotatingMessage}
+          </p>
+        </div>
+
+        {stage !== "error" && (
+          <>
+            <div className="progress-track">
+              <div className="progress-fill" style={{ width: `${smoothPct}%` }} />
+            </div>
+
+            <ul className="checklist">
+              {CHECKLIST_ITEMS.map((item, i) => {
+                const checked = checklistState(item.key);
+                const isNext = !checked && (i === 0 || checklistState(CHECKLIST_ITEMS[i - 1].key));
+                return (
+                  <li key={item.key} className={checked ? "checklist-item checked" : isNext ? "checklist-item active" : "checklist-item"}>
+                    <span className="checklist-icon">
+                      {checked ? (
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                          <path d="M3 8.5l3.2 3.2L13 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      ) : (
+                        <span className="checklist-dot" />
+                      )}
+                    </span>
+                    {item.label}
+                    {i < CHECKLIST_ITEMS.length - 1 && (
+                      <svg className="checklist-connector" width="2" height="14" viewBox="0 0 2 14">
+                        <path d="M1 0v14" stroke={checked ? "#3e7f5c" : "#e3e2dd"} strokeWidth="1.5" className={checked ? "" : "checklist-connector-dash"} />
+                      </svg>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
+
         {stage === "error" && <a href="/interview" className="retry-btn">← Back to interview</a>}
       </div>
       <style>{`
         .loading-root { min-height:100vh; background:#f8f8f7; display:flex; align-items:center; justify-content:center; padding:24px; font-family:'DM Sans',sans-serif; }
-        .loading-card { background:#fff; border:1px solid #e8e8e5; border-radius:20px; padding:48px 40px; width:100%; max-width:400px; text-align:center; }
-        .loading-logo { width:52px; height:52px; border-radius:14px; background:#111; color:#111; display:flex; align-items:center; justify-content:center; margin:0 auto 28px; }
-        .progress-track { width:100%; height:3px; background:#efefed; border-radius:99px; overflow:hidden; margin-bottom:28px; }
-        .progress-fill { height:100%; background:#111; border-radius:99px; transition:width 0.6s ease; }
-        .loading-title { font-size:20px; font-weight:600; color:#111; margin-bottom:10px; }
-        .loading-desc { font-size:14px; color:#888; line-height:1.7; }
-        .loading-dots { display:flex; align-items:center; justify-content:center; gap:6px; margin-top:28px; }
-        .dot { width:6px; height:6px; border-radius:50%; background:#ccc; animation:blink 1.2s ease-in-out infinite; }
-        @keyframes blink { 0%,80%,100%{opacity:0.3} 40%{opacity:1} }
-        .retry-btn { display:inline-block; margin-top:24px; font-size:13px; font-weight:500; color:#111; text-decoration:none; border:1px solid #e0e0dd; border-radius:99px; padding:8px 20px; }
+        .loading-card { background:#fff; border:1px solid #e8e8e5; border-radius:20px; padding:40px 40px 44px; width:100%; max-width:420px; text-align:center; animation:cardIn 0.5s cubic-bezier(0.16,1,0.3,1) both; }
+        @keyframes cardIn { from{opacity:0;transform:translateY(14px) scale(0.98)} to{opacity:1;transform:translateY(0) scale(1)} }
+        .node-diagram-wrap { width:128px; height:128px; margin:0 auto 18px; }
+        .node-diagram { width:100%; height:100%; }
+        .node-orbit { transform-origin:100px 100px; animation:orbitSpin 16s linear infinite; }
+        @keyframes orbitSpin { to{transform:rotate(360deg)} }
+        .node-flow-dash { stroke-dasharray:2 5; animation:flowDash 1.6s linear infinite; }
+        @keyframes flowDash { to{stroke-dashoffset:-14} }
+        .node-pulse { animation:nodePulse 2.7s ease-in-out infinite; transform-origin:center; }
+        @keyframes nodePulse { 0%,100%{fill:#fff; stroke:#cecece} 35%{fill:#111; stroke:#111} 55%{fill:#111; stroke:#111} 85%{fill:#fff; stroke:#cecece} }
+        .partial-score-peek { display:flex; align-items:baseline; justify-content:center; gap:4px; margin-bottom:20px; animation:popIn 0.45s cubic-bezier(0.16,1,0.3,1) both; }
+        @keyframes popIn { from{opacity:0;transform:scale(0.85) translateY(4px)} to{opacity:1;transform:scale(1) translateY(0)} }
+        .partial-score-value { font-family:'Instrument Serif',serif; font-size:38px; color:#111; line-height:1; }
+        .partial-score-denom { font-size:15px; color:#bbb; }
+        .partial-score-label { font-size:11px; color:#aaa; margin-left:8px; }
+        .loading-text { min-height:70px; }
+        .loading-title { font-size:19px; font-weight:600; color:#111; margin-bottom:8px; animation:fadeUpText 0.4s ease both; }
+        .loading-desc { font-size:13.5px; color:#888; line-height:1.6; }
+        .loading-desc-rotating { animation:fadeUpText 0.4s ease both; }
+        @keyframes fadeUpText { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
+        .progress-track { width:100%; height:4px; background:#efefed; border-radius:99px; overflow:hidden; margin:22px 0 18px; position:relative; }
+        .progress-fill { height:100%; background:#111; border-radius:99px; transition:width 0.4s cubic-bezier(0.4,0,0.2,1); position:relative; }
+        .progress-fill::after { content:''; position:absolute; top:0; right:0; bottom:0; width:24px; background:linear-gradient(90deg, transparent, rgba(255,255,255,0.35)); animation:shimmer 1.3s ease-in-out infinite; }
+        @keyframes shimmer { 0%,100%{opacity:0.3} 50%{opacity:1} }
+        .checklist { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:0; text-align:left; }
+        .checklist-item { position:relative; display:flex; align-items:center; gap:10px; font-size:13px; color:#bbb; transition:color 0.3s ease; padding:5px 0; }
+        .checklist-item.checked { color:#444; }
+        .checklist-item.active { color:#666; }
+        .checklist-icon { width:18px; height:18px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:background 0.3s ease, color 0.3s ease; background:#f0efec; color:transparent; z-index:1; position:relative; }
+        .checklist-item.checked .checklist-icon { background:#111; color:#fff; animation:checkPop 0.35s cubic-bezier(0.16,1,0.3,1) both; }
+        .checklist-item.active .checklist-icon { background:#fff; border:1.5px solid #111; }
+        @keyframes checkPop { from{transform:scale(0.6)} to{transform:scale(1)} }
+        .checklist-dot { width:5px; height:5px; border-radius:50%; background:#ddd; }
+        .checklist-item.active .checklist-dot { background:#111; animation:dotPulse 1.4s ease-in-out infinite; }
+        .checklist-connector { position:absolute; left:8px; top:23px; z-index:0; }
+        .checklist-connector-dash { stroke-dasharray:2 3; animation:connectorFlow 1s linear infinite; }
+        @keyframes connectorFlow { to{stroke-dashoffset:-5} }
+        @keyframes dotPulse { 0%,100%{opacity:0.4} 50%{opacity:1} }
+        .retry-btn { display:inline-block; margin-top:8px; font-size:13px; font-weight:500; color:#111; text-decoration:none; border:1px solid #e0e0dd; border-radius:99px; padding:8px 20px; }
       `}</style>
     </main>
   );
@@ -303,7 +506,6 @@ function GtmCard({ gtm }: { gtm: GtmStrategy }) {
     <div className="gtm-card">
       <p className="gtm-card-label">🚀 Go-To-Market Strategy</p>
 
-      {/* Pricing */}
       <div className="gtm-section">
         <p className="gtm-section-title">💰 Pricing</p>
         <div className="gtm-pricing-box">
@@ -315,7 +517,6 @@ function GtmCard({ gtm }: { gtm: GtmStrategy }) {
         </div>
       </div>
 
-      {/* Fastest Channel */}
       <div className="gtm-section">
         <p className="gtm-section-title">⚡ Fastest path to first paying customer</p>
         <div className="gtm-fastest-box">
@@ -324,7 +525,6 @@ function GtmCard({ gtm }: { gtm: GtmStrategy }) {
         </div>
       </div>
 
-      {/* First 100 Playbook */}
       <div className="gtm-section">
         <p className="gtm-section-title">📋 First 100 users — step by step</p>
         <div className="gtm-playbook">
@@ -357,7 +557,6 @@ function GtmCard({ gtm }: { gtm: GtmStrategy }) {
         </div>
       </div>
 
-      {/* Channels */}
       <div className="gtm-section">
         <p className="gtm-section-title">📡 Channels</p>
         <div className="gtm-channels">
@@ -381,7 +580,6 @@ function GtmCard({ gtm }: { gtm: GtmStrategy }) {
         </div>
       </div>
 
-      {/* North Star Metric */}
       <div className="gtm-section">
         <p className="gtm-section-title">🎯 North star metric</p>
         <div className="gtm-metric-box">
@@ -393,7 +591,6 @@ function GtmCard({ gtm }: { gtm: GtmStrategy }) {
         </div>
       </div>
 
-      {/* GTM Risks */}
       {gtm.gtmRisks?.length > 0 && (
         <div className="gtm-section">
           <p className="gtm-section-title">⚠️ GTM risks</p>
@@ -449,7 +646,6 @@ async function generatePDF(blueprint: Blueprint) {
     y += lines.length * lineH + 2;
   }
 
-  // HEADER
   doc.setFillColor(17, 17, 17);
   doc.rect(0, 0, 210, 30, "F");
   doc.setFontSize(20); doc.setTextColor(255,255,255); doc.setFont("helvetica","bold");
@@ -458,7 +654,6 @@ async function generatePDF(blueprint: Blueprint) {
   doc.text("AI-generated startup blueprint  ·  blueprintai.com", margin, 24);
   y = 40;
 
-  // SCORE
   const scoreRGB: [number,number,number] = blueprint.score.confidence === "High" ? [22,101,52] : blueprint.score.confidence === "Low" ? [153,27,27] : [133,77,14];
   const scoreBgRGB: [number,number,number] = blueprint.score.confidence === "High" ? [240,253,244] : blueprint.score.confidence === "Low" ? [254,242,242] : [254,252,232];
   doc.setFillColor(...scoreBgRGB);
@@ -476,7 +671,6 @@ async function generatePDF(blueprint: Blueprint) {
   doc.text(reasonLines, margin + 42, y + 17);
   y += 42;
 
-  // BUILD ESTIMATE
   if (blueprint.buildEstimate) {
     const be = blueprint.buildEstimate;
     checkPageBreak(20);
@@ -514,26 +708,22 @@ async function generatePDF(blueprint: Blueprint) {
     doc.setDrawColor(230,230,228); doc.line(margin, y, margin + contentWidth, y); y += 8;
   }
 
-  // GTM
   if (blueprint.gtmStrategy) {
     const gtm = blueprint.gtmStrategy;
     checkPageBreak(20);
     doc.setFontSize(11); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold");
     doc.text("Go-To-Market Strategy", margin, y); y += 8;
 
-    // Pricing
     doc.setFontSize(9); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold");
     doc.text(`Pricing: ${gtm.pricingModel.recommendation} — ${gtm.pricingModel.model}`, margin, y); y += 5;
     addText(gtm.pricingModel.reasoning, 9, [85,85,85]);
     y += 2;
 
-    // Fastest channel
     doc.setFontSize(9); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold");
     doc.text(`Fastest channel: ${gtm.fastestChannel.channel}`, margin, y); y += 5;
     addText(gtm.fastestChannel.why, 9, [85,85,85]);
     y += 2;
 
-    // First 100 playbook
     doc.setFontSize(9); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold");
     doc.text("First 100 Users Playbook", margin, y); y += 5;
     for (const step of gtm.first100Playbook) {
@@ -550,7 +740,6 @@ async function generatePDF(blueprint: Blueprint) {
     }
     y += 2;
 
-    // Channels
     doc.setFontSize(9); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold");
     doc.text("Channels", margin, y); y += 5;
     for (const ch of gtm.channels) {
@@ -563,13 +752,11 @@ async function generatePDF(blueprint: Blueprint) {
     }
     y += 2;
 
-    // North star metric
     doc.setFontSize(9); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold");
     doc.text(`North Star: ${gtm.northStarMetric.metric} — ${gtm.northStarMetric.target}`, margin, y); y += 5;
     addText(gtm.northStarMetric.why, 9, [85,85,85]);
     y += 2;
 
-    // GTM risks
     if (gtm.gtmRisks?.length) {
       doc.setFontSize(9); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold");
       doc.text("GTM Risks", margin, y); y += 5;
@@ -586,7 +773,6 @@ async function generatePDF(blueprint: Blueprint) {
     doc.setDrawColor(230,230,228); doc.line(margin, y, margin + contentWidth, y); y += 8;
   }
 
-  // SECTIONS
   for (const section of blueprint.sections) {
     checkPageBreak(24);
     doc.setFillColor(17,17,17);
@@ -614,7 +800,6 @@ async function generatePDF(blueprint: Blueprint) {
     y += 8;
   }
 
-  // FOOTER
   const total = doc.getNumberOfPages();
   for (let i = 1; i <= total; i++) {
     doc.setPage(i);
@@ -628,14 +813,18 @@ async function generatePDF(blueprint: Blueprint) {
 }
 
 export default function BlueprintPage() {
-  const [loading, setLoading]       = useState(true);
-  const [stage, setStage]           = useState<Stage>("thinking");
-  const [blueprint, setBlueprint]   = useState<Blueprint | null>(null);
-  const [saved, setSaved]           = useState(false);
-  const [showModal, setShowModal]   = useState(false);
-  const [pdfLoading, setPdfLoading] = useState(false);
-  const saveAttempted               = useRef(false);
-  const { isSignedIn, isLoaded }    = useAuth();
+  const [loading, setLoading]             = useState(true);
+  const [stage, setStage]                 = useState<Stage>("thinking");
+  const [blueprint, setBlueprint]         = useState<Blueprint | null>(null);
+  const [partialScore, setPartialScore]   = useState<BlueprintScore | null>(null);
+  const [streamProgress, setStreamProgress] = useState<StreamProgress>({
+    hasScore: false, hasBuildEstimate: false, hasGtmStrategy: false, sectionsSeen: 0,
+  });
+  const [saved, setSaved]                 = useState(false);
+  const [showModal, setShowModal]         = useState(false);
+  const [pdfLoading, setPdfLoading]       = useState(false);
+  const saveAttempted                     = useRef(false);
+  const { isSignedIn, isLoaded }          = useAuth();
 
   useEffect(() => {
     if (!isLoaded || !blueprint || saved || saveAttempted.current) return;
@@ -657,31 +846,91 @@ export default function BlueprintPage() {
   useEffect(() => {
     const raw = sessionStorage.getItem("blueprint-input");
     if (!raw) { setStage("error"); setLoading(false); return; }
+
     const cached = sessionStorage.getItem("blueprint-output");
     if (cached) {
       const parsed = parseBlueprint(cached);
       if (parsed) { setBlueprint(parsed); setStage("done"); setLoading(false); return; }
     }
+
     async function generateBlueprint() {
       try {
         setStage("thinking");
-        await new Promise((r) => setTimeout(r, 900));
-        setStage("generating");
-        const res = await fetch("/api/blueprint", {
-          method: "POST", headers: { "Content-Type": "application/json" }, body: raw,
-        });
-        const data = await res.json();
-        if (!res.ok || data.error) { setStage("error"); setLoading(false); return; }
-        setStage("finalizing");
         await new Promise((r) => setTimeout(r, 600));
-        const parsed = parseBlueprint(data.blueprint);
-        if (!parsed) { setStage("error"); setLoading(false); return; }
-        sessionStorage.setItem("blueprint-output", data.blueprint);
+        setStage("generating");
+
+        const res = await fetch("/api/blueprint", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: raw,
+        });
+
+        if (!res.ok || !res.body) {
+          setStage("error");
+          setLoading(false);
+          return;
+        }
+
+        // Read the stream as it arrives. OpenRouter sends Server-Sent Events:
+        // lines like `data: {"choices":[{"delta":{"content":"..."}}]}` followed
+        // by a final `data: [DONE]`. We accumulate just the text content.
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let accumulated = "";
+        let sseBuffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          sseBuffer += decoder.decode(value, { stream: true });
+          const lines = sseBuffer.split("\n");
+          sseBuffer = lines.pop() ?? ""; // keep any incomplete trailing line for next chunk
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("data:")) continue;
+            const payload = trimmed.slice(5).trim();
+            if (payload === "[DONE]") continue;
+
+            try {
+              const json = JSON.parse(payload);
+              const delta = json.choices?.[0]?.delta?.content;
+              if (delta) {
+                accumulated += delta;
+                // Try to surface the score as soon as it appears in the stream
+                const partial = tryExtractPartialScore(accumulated);
+                if (partial) setPartialScore(partial);
+                setStreamProgress(analyzeStreamProgress(accumulated));
+              }
+            } catch {
+              // Incomplete JSON chunk straddling a read boundary — skip and
+              // wait for more data, this is expected and not an error.
+            }
+          }
+        }
+
+        setStage("finalizing");
+        const parsed = parseBlueprint(accumulated);
+        if (!parsed) {
+          console.error("Could not parse final streamed blueprint:", accumulated.slice(0, 300));
+          setStage("error");
+          setLoading(false);
+          return;
+        }
+
+        const clean = accumulated.replace(/```json|```/g, "").trim();
+        sessionStorage.setItem("blueprint-output", clean);
         setBlueprint(parsed);
         setStage("done");
-      } catch { setStage("error"); }
-      finally { setLoading(false); }
+      } catch (err) {
+        console.error("Streaming blueprint error:", err);
+        setStage("error");
+      } finally {
+        setLoading(false);
+      }
     }
+
     generateBlueprint();
   }, []);
 
@@ -721,8 +970,8 @@ export default function BlueprintPage() {
     finally { setPdfLoading(false); }
   }
 
-  if (loading || stage !== "done") return <LoadingScreen stage={stage} />;
-  if (!blueprint) return <LoadingScreen stage="error" />;
+  if (loading || stage !== "done") return <LoadingScreen stage={stage} partialScore={partialScore} progress={streamProgress} />;
+  if (!blueprint) return <LoadingScreen stage="error" partialScore={null} progress={streamProgress} />;
 
   return (
     <main className="bp-root">
