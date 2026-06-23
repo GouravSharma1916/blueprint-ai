@@ -229,9 +229,14 @@ REMINDER BEFORE YOU RESPOND:
     }
 
     const data = await response.json();
-    const raw: string = data.choices[0].message.content;
-    const clean = raw.replace(/```json|```/g, "").trim();
+const raw: string = data.choices[0].message.content;
 
+console.log("=== RAW MODEL OUTPUT (first 500 chars) ===");
+console.log(raw.slice(0, 500));
+console.log("=== RAW MODEL OUTPUT (last 200 chars) ===");
+console.log(raw.slice(-200));
+
+const clean = raw.replace(/```json|```/g, "").trim();
     try {
       JSON.parse(clean);
     } catch {
