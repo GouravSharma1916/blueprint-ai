@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { useAuth } from "@clerk/nextjs";
+import { useAuth, useUser } from "@clerk/nextjs";
 
 type Stage = "thinking" | "generating" | "finalizing" | "done" | "error";
 type Confidence = "High" | "Medium" | "Low";
@@ -97,10 +97,6 @@ const SECTION_META: Record<number, { icon: string; accent?: string }> = {
   11: { icon: "🧭", accent: "founder" },
 };
 
-// Stage transitions still drive which screen renders, but the loading
-// copy itself now lives inside LoadingScreen (rotating messages + checklist)
-// rather than one static line per stage.
-
 function parseBlueprint(raw: string): Blueprint | null {
   try {
     const clean = raw.replace(/```json|```/g, "").trim();
@@ -110,10 +106,6 @@ function parseBlueprint(raw: string): Blueprint | null {
   }
 }
 
-// Best-effort partial parse: while the JSON is still streaming in and
-// incomplete, we can't JSON.parse the whole thing yet. But we CAN pull out
-// the score block early with a regex once it's appeared, so the user sees
-// something concrete within a few seconds instead of a blank loader.
 function tryExtractPartialScore(raw: string): BlueprintScore | null {
   const clean = raw.replace(/```json|```/g, "");
   const match = clean.match(/"score"\s*:\s*\{[^}]*"value"\s*:\s*([\d.]+)[^}]*"confidence"\s*:\s*"(High|Medium|Low)"/);
@@ -126,8 +118,6 @@ function tryExtractPartialScore(raw: string): BlueprintScore | null {
   };
 }
 
-// Detects how far the stream has progressed so the loading screen can show
-// a live checklist instead of one static message the whole time.
 const KNOWN_SECTION_TITLES = [
   "Startup Summary", "Ideal Customer Profile", "Problem Analysis",
   "Why Existing Solutions Fail", "Market Timing", "MVP Scope",
@@ -228,9 +218,6 @@ function LoadingScreen({
 }) {
   const rotatingMessage = useRotatingMessage(stage === "generating");
 
-  // Drives a smooth, ever-creeping progress bar that never fully stalls,
-  // even between real signals from the stream — small jitter keeps it
-  // feeling alive instead of frozen on one percentage for 20+ seconds.
   const [smoothPct, setSmoothPct] = useState(6);
   const targetPct =
     stage === "error" ? 0 :
@@ -249,7 +236,7 @@ function LoadingScreen({
     const id = setInterval(() => {
       setSmoothPct((p) => {
         if (p < targetPct) return Math.min(targetPct, p + Math.max(0.3, (targetPct - p) * 0.08));
-        if (stage === "generating" && p < 92) return p + 0.05; // gentle creep so it never looks stuck
+        if (stage === "generating" && p < 92) return p + 0.05;
         return p;
       });
     }, 80);
@@ -713,17 +700,14 @@ async function generatePDF(blueprint: Blueprint) {
     checkPageBreak(20);
     doc.setFontSize(11); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold");
     doc.text("Go-To-Market Strategy", margin, y); y += 8;
-
     doc.setFontSize(9); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold");
     doc.text(`Pricing: ${gtm.pricingModel.recommendation} — ${gtm.pricingModel.model}`, margin, y); y += 5;
     addText(gtm.pricingModel.reasoning, 9, [85,85,85]);
     y += 2;
-
     doc.setFontSize(9); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold");
     doc.text(`Fastest channel: ${gtm.fastestChannel.channel}`, margin, y); y += 5;
     addText(gtm.fastestChannel.why, 9, [85,85,85]);
     y += 2;
-
     doc.setFontSize(9); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold");
     doc.text("First 100 Users Playbook", margin, y); y += 5;
     for (const step of gtm.first100Playbook) {
@@ -739,7 +723,6 @@ async function generatePDF(blueprint: Blueprint) {
       doc.text(sigLines, margin + 4, y); y += sigLines.length * 3.8 + 3;
     }
     y += 2;
-
     doc.setFontSize(9); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold");
     doc.text("Channels", margin, y); y += 5;
     for (const ch of gtm.channels) {
@@ -751,12 +734,10 @@ async function generatePDF(blueprint: Blueprint) {
       doc.text(chLines, margin + 4, y); y += chLines.length * 3.8 + 3;
     }
     y += 2;
-
     doc.setFontSize(9); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold");
     doc.text(`North Star: ${gtm.northStarMetric.metric} — ${gtm.northStarMetric.target}`, margin, y); y += 5;
     addText(gtm.northStarMetric.why, 9, [85,85,85]);
     y += 2;
-
     if (gtm.gtmRisks?.length) {
       doc.setFontSize(9); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold");
       doc.text("GTM Risks", margin, y); y += 5;
@@ -768,7 +749,6 @@ async function generatePDF(blueprint: Blueprint) {
         doc.text(rl, margin + 7, y); y += rl.length * 4 + 2;
       }
     }
-
     y += 6;
     doc.setDrawColor(230,230,228); doc.line(margin, y, margin + contentWidth, y); y += 8;
   }
@@ -812,19 +792,174 @@ async function generatePDF(blueprint: Blueprint) {
   doc.save("blueprint.pdf");
 }
 
+// ─── BUILD THIS FOR ME MODAL ──────────────────────────────────────────────────
+// Only ever opened for signed-in users now (gated upstream), so there is no
+// guest-email path here anymore — it always has a real email/image to send.
+type BuildModalStep = "pricing" | "yes_maybe" | "no_feedback" | "done";
+
+function BuildThisModal({
+  blueprintId,
+  userEmail,
+  userImageUrl,
+  onClose,
+}: {
+  blueprintId: string | null;
+  userEmail: string | null;
+  userImageUrl: string | null;
+  onClose: () => void;
+}) {
+  const [step, setStep] = useState<BuildModalStep>("pricing");
+  const [feedback, setFeedback] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save(response: "yes" | "maybe" | "no", fb?: string) {
+    setSaving(true);
+    setError("");
+    try {
+      const res = await fetch("/api/build-interest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          blueprint_id: blueprintId,
+          response,
+          feedback: fb ?? null,
+          email: userEmail,
+          image_url: userImageUrl,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error ?? "Something went wrong");
+      }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to save");
+      setSaving(false);
+      return false;
+    }
+    setSaving(false);
+    return true;
+  }
+
+  function handleResponse(r: "yes" | "maybe" | "no") {
+    if (r === "no") {
+      setStep("no_feedback");
+    } else {
+      save(r).then((ok) => { if (ok) setStep("yes_maybe"); });
+    }
+  }
+
+  async function submitFeedback() {
+    const ok = await save("no", feedback);
+    if (ok) setStep("done");
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box build-modal-box" onClick={(e) => e.stopPropagation()}>
+        <button className="build-modal-close" onClick={onClose} aria-label="Close">×</button>
+
+        {/* ── Pricing step ── */}
+        {step === "pricing" && (
+          <>
+            <p className="build-modal-eyebrow">Early access</p>
+            <h2 className="build-modal-title">Get this built for you</h2>
+            <p className="build-modal-sub">
+              We'll turn your blueprint into a working MVP — code files, GitHub repo, and deployment guide.
+            </p>
+            <div className="build-modal-price-card">
+              <div className="build-modal-price-row">
+                <span className="build-modal-price">₹20</span>
+                <span className="build-modal-price-note">one-time</span>
+              </div>
+              <ul className="build-modal-perks">
+                <li>✓ Full source code for your MVP</li>
+                <li>✓ Private GitHub repo delivered to you</li>
+                <li>✓ Step-by-step deployment guide</li>
+              </ul>
+            </div>
+            <p className="build-modal-question">Are you interested?</p>
+            <div className="build-modal-actions">
+              <button className="build-btn-yes" onClick={() => handleResponse("yes")} disabled={saving}>Yes</button>
+              <button className="build-btn-maybe" onClick={() => handleResponse("maybe")} disabled={saving}>Maybe</button>
+              <button className="build-btn-no" onClick={() => handleResponse("no")} disabled={saving}>No</button>
+            </div>
+            {error && <p className="build-modal-error">{error}</p>}
+          </>
+        )}
+
+        {/* ── Yes / Maybe confirmed ── */}
+        {step === "yes_maybe" && (
+          <div className="build-modal-confirm">
+            <div className="build-modal-confirm-icon">🚀</div>
+            <h2 className="build-modal-title">You're on the list 🎉</h2>
+            <p className="build-modal-sub">
+              We're launching this in the next few days. You'll be the first to know — we'll reach out on your registered email, the moment it's live.
+            </p>
+            <button className="build-modal-link-btn" onClick={onClose}>Back to blueprint</button>
+          </div>
+        )}
+
+        {/* ── No → feedback ── */}
+        {step === "no_feedback" && (
+          <>
+            <h2 className="build-modal-title">Got it — what would you need instead?</h2>
+            <p className="build-modal-sub">Your feedback helps us build something actually useful.</p>
+            <textarea
+              rows={4}
+              placeholder="e.g. I'd want it cheaper, or I'd prefer to build it myself with more guidance…"
+              value={feedback}
+              onChange={(e) => setFeedback(e.target.value)}
+              className="build-modal-textarea"
+            />
+            <button
+              className="build-btn-yes"
+              style={{ width: "100%" }}
+              onClick={submitFeedback}
+              disabled={saving || !feedback.trim()}
+            >
+              {saving ? "Saving…" : "Send feedback"}
+            </button>
+            {error && <p className="build-modal-error">{error}</p>}
+          </>
+        )}
+
+        {/* ── Done (after no + feedback) ── */}
+        {step === "done" && (
+          <div className="build-modal-confirm">
+            <div className="build-modal-confirm-icon">🙏</div>
+            <h2 className="build-modal-title">Thanks for the feedback</h2>
+            <p className="build-modal-sub">We read every response. This helps us build something you'd actually use.</p>
+            <button className="build-modal-link-btn" onClick={onClose}>Back to blueprint</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 export default function BlueprintPage() {
-  const [loading, setLoading]             = useState(true);
-  const [stage, setStage]                 = useState<Stage>("thinking");
-  const [blueprint, setBlueprint]         = useState<Blueprint | null>(null);
-  const [partialScore, setPartialScore]   = useState<BlueprintScore | null>(null);
+  const [loading, setLoading]               = useState(true);
+  const [stage, setStage]                   = useState<Stage>("thinking");
+  const [blueprint, setBlueprint]           = useState<Blueprint | null>(null);
+  const [partialScore, setPartialScore]     = useState<BlueprintScore | null>(null);
   const [streamProgress, setStreamProgress] = useState<StreamProgress>({
     hasScore: false, hasBuildEstimate: false, hasGtmStrategy: false, sectionsSeen: 0,
   });
-  const [saved, setSaved]                 = useState(false);
-  const [showModal, setShowModal]         = useState(false);
-  const [pdfLoading, setPdfLoading]       = useState(false);
-  const saveAttempted                     = useRef(false);
-  const { isSignedIn, isLoaded }          = useAuth();
+  const [saved, setSaved]                   = useState(false);
+  const [blueprintId, setBlueprintId]       = useState<string | null>(null);
+  const [showBuildModal, setShowBuildModal] = useState(false);
+  const [pdfLoading, setPdfLoading]         = useState(false);
+  const saveAttempted                       = useRef(false);
+  const { isSignedIn, isLoaded }            = useAuth();
+  const { user }                            = useUser();
+
+  // Pulled once Clerk has loaded the signed-in user; used for the Build
+  // modal and sent straight to /api/build-interest so we never have to
+  // ask a signed-in person to type their own email.
+  const userEmail    = user?.primaryEmailAddress?.emailAddress ?? null;
+  const userImageUrl = user?.imageUrl ?? null;
 
   useEffect(() => {
     if (!isLoaded || !blueprint || saved || saveAttempted.current) return;
@@ -839,7 +974,12 @@ export default function BlueprintPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ answers, blueprint: bp, score: bp?.score?.value }),
       });
-      if (res.ok) setSaved(true);
+      if (res.ok) {
+        const data = await res.json();
+        setSaved(true);
+        // capture the id so the Build modal can reference this blueprint
+        if (data.id) setBlueprintId(data.id);
+      }
     } catch { /* silent */ }
   }
 
@@ -865,15 +1005,8 @@ export default function BlueprintPage() {
           body: raw,
         });
 
-        if (!res.ok || !res.body) {
-          setStage("error");
-          setLoading(false);
-          return;
-        }
+        if (!res.ok || !res.body) { setStage("error"); setLoading(false); return; }
 
-        // Read the stream as it arrives. OpenRouter sends Server-Sent Events:
-        // lines like `data: {"choices":[{"delta":{"content":"..."}}]}` followed
-        // by a final `data: [DONE]`. We accumulate just the text content.
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let accumulated = "";
@@ -882,42 +1015,30 @@ export default function BlueprintPage() {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-
           sseBuffer += decoder.decode(value, { stream: true });
           const lines = sseBuffer.split("\n");
-          sseBuffer = lines.pop() ?? ""; // keep any incomplete trailing line for next chunk
-
+          sseBuffer = lines.pop() ?? "";
           for (const line of lines) {
             const trimmed = line.trim();
             if (!trimmed.startsWith("data:")) continue;
             const payload = trimmed.slice(5).trim();
             if (payload === "[DONE]") continue;
-
             try {
               const json = JSON.parse(payload);
               const delta = json.choices?.[0]?.delta?.content;
               if (delta) {
                 accumulated += delta;
-                // Try to surface the score as soon as it appears in the stream
                 const partial = tryExtractPartialScore(accumulated);
                 if (partial) setPartialScore(partial);
                 setStreamProgress(analyzeStreamProgress(accumulated));
               }
-            } catch {
-              // Incomplete JSON chunk straddling a read boundary — skip and
-              // wait for more data, this is expected and not an error.
-            }
+            } catch { /* incomplete chunk — expected */ }
           }
         }
 
         setStage("finalizing");
         const parsed = parseBlueprint(accumulated);
-        if (!parsed) {
-          console.error("Could not parse final streamed blueprint:", accumulated.slice(0, 300));
-          setStage("error");
-          setLoading(false);
-          return;
-        }
+        if (!parsed) { setStage("error"); setLoading(false); return; }
 
         const clean = accumulated.replace(/```json|```/g, "").trim();
         sessionStorage.setItem("blueprint-output", clean);
@@ -965,9 +1086,25 @@ export default function BlueprintPage() {
 
   async function handleDownloadPDF() {
     if (!blueprint || pdfLoading) return;
+    // Require sign-in before downloading — guests get sent to sign in,
+    // then back to this same blueprint via the redirect_url param.
+    if (!isSignedIn) {
+      window.location.href = "/sign-in?redirect_url=/blueprint";
+      return;
+    }
     setPdfLoading(true);
     try { await generatePDF(blueprint); }
     finally { setPdfLoading(false); }
+  }
+
+  function handleBuildThisForMe() {
+    // Require sign-in before opening the Build modal at all — no guest
+    // email path anymore, just a straight redirect like Save/PDF.
+    if (!isSignedIn) {
+      window.location.href = "/sign-in?redirect_url=/blueprint";
+      return;
+    }
+    setShowBuildModal(true);
   }
 
   if (loading || stage !== "done") return <LoadingScreen stage={stage} partialScore={partialScore} progress={streamProgress} />;
@@ -975,6 +1112,7 @@ export default function BlueprintPage() {
 
   return (
     <main className="bp-root">
+      {/* ── Hero / header ── */}
       <div className="bp-hero">
         <div className="bp-hero-inner">
           <div className="status-badge">
@@ -1003,10 +1141,10 @@ export default function BlueprintPage() {
             {saved ? (
               <a href="/dashboard" className="action-btn save-btn">View in Dashboard →</a>
             ) : !isSignedIn ? (
-              <button className="action-btn save-btn" onClick={() => setShowModal(true)}>
+              <a href="/sign-in?redirect_url=/blueprint" className="action-btn save-btn">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
                 Save blueprint
-              </button>
+              </a>
             ) : null}
           </div>
         </div>
@@ -1018,34 +1156,58 @@ export default function BlueprintPage() {
         <span className="meta-text">Score · Build Estimate · GTM · ICP · MVP · Risks · 30-Day Plan</span>
       </div>
 
+      {/* ── Score + special cards ── */}
       <div className="bp-score-wrap">
         <ScoreCard score={blueprint.score} />
         {blueprint.buildEstimate && <BuildEstimateCard estimate={blueprint.buildEstimate} />}
         {blueprint.gtmStrategy && <GtmCard gtm={blueprint.gtmStrategy} />}
       </div>
 
+      {/* ── Sections ── */}
       <div className="bp-sections">
         {blueprint.sections.map((section, i) => (
           <SectionCard key={section.number} section={section} delay={i * 60} />
         ))}
       </div>
 
+      {/* ────────────────────────────────────────────────────────────────────
+          BUILD THIS FOR ME — separate section below all blueprint content
+      ──────────────────────────────────────────────────────────────────── */}
+      <div className="build-this-section">
+        <div className="build-this-inner">
+          <div className="build-this-text">
+            <p className="build-this-eyebrow">Skip the build</p>
+            <h2 className="build-this-title">Want this built for you?</h2>
+            <p className="build-this-sub">
+              We can turn this blueprint into a working MVP — code, repo, and deployment guide —
+              so you can launch without writing a line.
+            </p>
+          </div>
+          <button
+            className="build-this-btn"
+            disabled={!!isSignedIn && !saved}
+            onClick={handleBuildThisForMe}
+          >
+            {isSignedIn && !saved ? "Preparing…" : "Build this for me"}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </button>
+        </div>
+      </div>
+      {/* ───────────────────────────────────────────────────────────────── */}
+
       <div className="bp-footer">
         <p>Generated by Blueprint AI · Not financial or legal advice</p>
         <a href="/interview">Start a new blueprint →</a>
       </div>
 
-      {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
-            <p className="modal-title">Save your blueprint</p>
-            <p className="modal-sub">Create a free account — your blueprint will be saved automatically after sign up.</p>
-            <div className="modal-actions">
-              <a href="/sign-up?redirect_url=/blueprint" className="modal-btn-primary">Create free account</a>
-              <button className="modal-btn-secondary" onClick={() => setShowModal(false)}>Continue as guest</button>
-            </div>
-          </div>
-        </div>
+      {/* Build-this-for-me modal — only ever reached by signed-in users */}
+      {showBuildModal && (
+        <BuildThisModal
+          blueprintId={blueprintId}
+          userEmail={userEmail}
+          userImageUrl={userImageUrl}
+          onClose={() => setShowBuildModal(false)}
+        />
       )}
 
       <style>{`
@@ -1144,7 +1306,7 @@ export default function BlueprintPage() {
         .gtm-metric-why { font-size:13px; color:#666; line-height:1.65; }
         .gtm-risks { padding-left:18px; margin:0; display:flex; flex-direction:column; gap:6px; }
         .gtm-risks li { font-size:13px; color:#555; line-height:1.6; }
-        .bp-sections { max-width:720px; margin:0 auto; padding:16px 24px 48px; display:flex; flex-direction:column; gap:12px; }
+        .bp-sections { max-width:720px; margin:0 auto; padding:16px 24px 0; display:flex; flex-direction:column; gap:12px; }
         .section-card { background:#fff; border:1px solid #e8e8e5; border-radius:16px; padding:28px 28px 24px; animation:fadeUp 0.4s ease both; transition:box-shadow 0.2s; }
         .section-card:hover { box-shadow:0 4px 20px rgba(0,0,0,0.05); }
         .section-card--founder { border-color:#d4d0c8; background:#fafaf8; }
@@ -1168,12 +1330,56 @@ export default function BlueprintPage() {
         .do-not-list { padding-left:18px; margin:0; }
         .do-not-list li { font-size:14px; color:#555; margin-bottom:6px; line-height:1.6; }
         .do-not-list li:last-child { margin-bottom:0; }
+
+        /* ── Build This For Me section ── */
+        .build-this-section { max-width:720px; margin:32px auto 0; padding:0 24px 48px; }
+        .build-this-inner { background:#111; border-radius:20px; padding:36px 40px; display:flex; align-items:center; justify-content:space-between; gap:24px; flex-wrap:wrap; }
+        .build-this-text { flex:1; min-width:220px; }
+        .build-this-eyebrow { font-size:11px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:#888; margin-bottom:8px; }
+        .build-this-title { font-family:'Instrument Serif',serif; font-size:26px; font-weight:400; color:#fff; line-height:1.2; margin-bottom:10px; }
+        .build-this-sub { font-size:14px; color:#888; line-height:1.7; max-width:380px; }
+        .build-this-btn { display:inline-flex; align-items:center; gap:8px; background:#fff; color:#111; font-family:'DM Sans',sans-serif; font-size:14px; font-weight:600; border:none; border-radius:99px; padding:13px 24px; cursor:pointer; white-space:nowrap; transition:background 0.15s,transform 0.1s; flex-shrink:0; }
+        .build-this-btn:hover { background:#f0f0ee; transform:translateY(-1px); }
+        .build-this-btn:active { transform:translateY(0); }
+        .build-this-btn:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
+
+        /* ── Build modal ── */
+        .build-modal-box { max-width:400px; text-align:left; }
+        .build-modal-close { position:absolute; top:16px; right:18px; background:none; border:none; font-size:22px; color:#aaa; cursor:pointer; line-height:1; padding:4px; }
+        .build-modal-close:hover { color:#555; }
+        .build-modal-eyebrow { font-size:11px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:#6366f1; margin-bottom:8px; }
+        .build-modal-title { font-size:20px; font-weight:700; color:#111; margin-bottom:8px; }
+        .build-modal-sub { font-size:14px; color:#666; line-height:1.65; margin-bottom:20px; }
+        .build-modal-price-card { background:#f5f5ff; border:1px solid #e0e0ff; border-radius:14px; padding:18px 20px; margin-bottom:20px; }
+        .build-modal-price-row { display:flex; align-items:baseline; gap:8px; margin-bottom:10px; }
+        .build-modal-price { font-family:'Instrument Serif',serif; font-size:36px; color:#111; line-height:1; }
+        .build-modal-price-note { font-size:13px; color:#999; }
+        .build-modal-perks { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:6px; }
+        .build-modal-perks li { font-size:13px; color:#444; }
+        .build-modal-question { font-size:13px; font-weight:600; color:#111; text-align:center; margin-bottom:12px; }
+        .build-modal-actions { display:flex; gap:10px; }
+        .build-btn-yes { flex:1; background:#111; color:#fff; border:none; border-radius:10px; padding:11px; font-size:14px; font-weight:600; cursor:pointer; transition:background 0.15s; }
+        .build-btn-yes:hover:not(:disabled) { background:#333; }
+        .build-btn-yes:disabled { opacity:0.5; cursor:not-allowed; }
+        .build-btn-maybe,.build-btn-no { flex:1; background:#f4f4f2; color:#444; border:1px solid #e0e0dd; border-radius:10px; padding:11px; font-size:14px; font-weight:500; cursor:pointer; transition:background 0.15s; }
+        .build-btn-maybe:hover:not(:disabled),.build-btn-no:hover:not(:disabled) { background:#eaeae8; }
+        .build-btn-maybe:disabled,.build-btn-no:disabled { opacity:0.5; cursor:not-allowed; }
+        .build-modal-input { width:100%; border:1px solid #e0e0dd; border-radius:10px; padding:11px 14px; font-size:14px; font-family:'DM Sans',sans-serif; outline:none; margin-bottom:14px; }
+        .build-modal-input:focus { border-color:#999; }
+        .build-modal-textarea { width:100%; border:1px solid #e0e0dd; border-radius:10px; padding:11px 14px; font-size:14px; font-family:'DM Sans',sans-serif; outline:none; resize:none; margin-bottom:14px; }
+        .build-modal-textarea:focus { border-color:#999; }
+        .build-modal-confirm { text-align:center; padding:12px 0; }
+        .build-modal-confirm-icon { font-size:40px; margin-bottom:14px; }
+        .build-modal-link-btn { background:none; border:none; font-size:13px; color:#999; cursor:pointer; margin-top:16px; text-decoration:underline; }
+        .build-modal-link-btn:hover { color:#555; }
+        .build-modal-error { font-size:13px; color:#dc2626; text-align:center; margin-top:10px; }
+
         .bp-footer { max-width:720px; margin:0 auto; padding:24px 24px 48px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; border-top:1px solid #e8e8e5; }
         .bp-footer p { font-size:12px; color:#bbb; }
         .bp-footer a { font-size:13px; font-weight:500; color:#111; text-decoration:none; }
         .bp-footer a:hover { text-decoration:underline; }
         .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center; z-index:100; padding:24px; }
-        .modal-box { background:#fff; border-radius:20px; padding:32px; max-width:380px; width:100%; text-align:center; }
+        .modal-box { position:relative; background:#fff; border-radius:20px; padding:32px; width:100%; text-align:center; }
         .modal-title { font-size:20px; font-weight:600; color:#111; margin-bottom:8px; }
         .modal-sub { font-size:14px; color:#666; line-height:1.6; margin-bottom:24px; }
         .modal-actions { display:flex; flex-direction:column; gap:10px; }
@@ -1184,11 +1390,14 @@ export default function BlueprintPage() {
         @media (max-width:600px) {
           .bp-hero { padding:40px 20px 32px; }
           .section-card { padding:22px 18px 20px; }
-          .bp-sections { padding:16px 16px 40px; }
+          .bp-sections { padding:16px 16px 0; }
+          .build-this-section { padding:0 16px 40px; }
+          .build-this-inner { flex-direction:column; align-items:flex-start; padding:28px 24px; }
           .score-card { flex-direction:column; gap:16px; }
           .build-card,.gtm-card { padding:20px 18px; }
           .build-header { flex-direction:column; align-items:flex-start; }
           .gtm-step-grid { grid-template-columns:1fr; }
+          .build-modal-actions { flex-direction:column; }
         }
       `}</style>
     </main>
