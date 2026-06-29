@@ -83,18 +83,9 @@ interface Blueprint {
   sections: BlueprintSection[];
 }
 
-const SECTION_META: Record<number, { icon: string; accent?: string }> = {
-  1:  { icon: "🎯" },
-  2:  { icon: "👤" },
-  3:  { icon: "💡" },
-  4:  { icon: "⚔️" },
-  5:  { icon: "⏱️" },
-  6:  { icon: "🛠️" },
-  7:  { icon: "✅" },
-  8:  { icon: "⚠️", accent: "risk" },
-  9:  { icon: "🗣️" },
-  10: { icon: "📅" },
-  11: { icon: "🧭", accent: "founder" },
+const SECTION_META: Record<number, { accent?: string }> = {
+  8:  { accent: "risk" },
+  11: { accent: "founder" },
 };
 
 function parseBlueprint(raw: string): Blueprint | null {
@@ -156,7 +147,7 @@ function renderContent(content: string, accent?: string) {
         <>
           {before && <p className="section-para" style={{ marginBottom: "16px" }}>{before}</p>}
           <div className="do-not-box">
-            <p className="do-not-label">⛔ Do Not Build This If...</p>
+            <p className="do-not-label">Do Not Build This If...</p>
             <ul className="do-not-list">
               {doNotLines.map((l, i) => <li key={i}>{l.replace(/^[-•*\d.]\s*/, "")}</li>)}
             </ul>
@@ -420,7 +411,7 @@ function BuildEstimateCard({ estimate }: { estimate: BuildEstimate }) {
   return (
     <div className="build-card">
       <div className="build-header">
-        <p className="build-label">⚡ Build Time Estimate</p>
+        <p className="build-label">Build Time Estimate</p>
         <div className="build-timelines">
           <div className="build-timeline-item">
             <span className="build-timeline-value">{estimate.soloTimeline}</span>
@@ -453,13 +444,13 @@ function BuildEstimateCard({ estimate }: { estimate: BuildEstimate }) {
       </div>
       {estimate.hiddenComplexity && (
         <div className="build-warning">
-          <p className="build-warning-label">⚠️ Hidden complexity</p>
+          <p className="build-warning-label">Hidden complexity</p>
           <p className="build-warning-text">{estimate.hiddenComplexity}</p>
         </div>
       )}
       {estimate.fastestPath && (
         <div className="build-fastpath">
-          <p className="build-fastpath-label">🚀 Fastest path to signal</p>
+          <p className="build-fastpath-label">Fastest path to signal</p>
           <p className="build-fastpath-text">{estimate.fastestPath}</p>
         </div>
       )}
@@ -491,10 +482,10 @@ function GtmCard({ gtm }: { gtm: GtmStrategy }) {
 
   return (
     <div className="gtm-card">
-      <p className="gtm-card-label">🚀 Go-To-Market Strategy</p>
+      <p className="gtm-card-label">Go-To-Market Strategy</p>
 
       <div className="gtm-section">
-        <p className="gtm-section-title">💰 Pricing</p>
+        <p className="gtm-section-title">Pricing</p>
         <div className="gtm-pricing-box">
           <div className="gtm-pricing-top">
             <span className="gtm-pricing-value">{gtm.pricingModel.recommendation}</span>
@@ -505,7 +496,7 @@ function GtmCard({ gtm }: { gtm: GtmStrategy }) {
       </div>
 
       <div className="gtm-section">
-        <p className="gtm-section-title">⚡ Fastest path to first paying customer</p>
+        <p className="gtm-section-title">Fastest path to first paying customer</p>
         <div className="gtm-fastest-box">
           <p className="gtm-fastest-channel">{gtm.fastestChannel.channel}</p>
           <p className="gtm-fastest-why">{gtm.fastestChannel.why}</p>
@@ -513,7 +504,7 @@ function GtmCard({ gtm }: { gtm: GtmStrategy }) {
       </div>
 
       <div className="gtm-section">
-        <p className="gtm-section-title">📋 First 100 users — step by step</p>
+        <p className="gtm-section-title">First 100 users — step by step</p>
         <div className="gtm-playbook">
           {gtm.first100Playbook.map((step) => (
             <div key={step.step} className="gtm-step">
@@ -545,7 +536,7 @@ function GtmCard({ gtm }: { gtm: GtmStrategy }) {
       </div>
 
       <div className="gtm-section">
-        <p className="gtm-section-title">📡 Channels</p>
+        <p className="gtm-section-title">Channels</p>
         <div className="gtm-channels">
           {gtm.channels.map((ch, i) => {
             const tc = channelTypeColors[ch.type] ?? channelTypeColors.Inbound;
@@ -568,7 +559,7 @@ function GtmCard({ gtm }: { gtm: GtmStrategy }) {
       </div>
 
       <div className="gtm-section">
-        <p className="gtm-section-title">🎯 North star metric</p>
+        <p className="gtm-section-title">North star metric</p>
         <div className="gtm-metric-box">
           <div className="gtm-metric-top">
             <span className="gtm-metric-name">{gtm.northStarMetric.metric}</span>
@@ -580,7 +571,7 @@ function GtmCard({ gtm }: { gtm: GtmStrategy }) {
 
       {gtm.gtmRisks?.length > 0 && (
         <div className="gtm-section">
-          <p className="gtm-section-title">⚠️ GTM risks</p>
+          <p className="gtm-section-title">GTM risks</p>
           <ul className="gtm-risks">
             {gtm.gtmRisks.map((r, i) => <li key={i}>{r}</li>)}
           </ul>
@@ -591,7 +582,7 @@ function GtmCard({ gtm }: { gtm: GtmStrategy }) {
 }
 
 function SectionCard({ section, delay }: { section: BlueprintSection; delay: number }) {
-  const meta = SECTION_META[section.number] ?? { icon: "📄" };
+  const meta = SECTION_META[section.number] ?? {};
   return (
     <div
       className={`section-card ${meta.accent === "founder" ? "section-card--founder" : ""} ${meta.accent === "risk" ? "section-card--risk" : ""}`}
@@ -599,7 +590,7 @@ function SectionCard({ section, delay }: { section: BlueprintSection; delay: num
     >
       <div className="section-header">
         <div className="section-header-left">
-          <p className="section-label"><span className="section-icon">{meta.icon}</span>Section {section.number}</p>
+          <p className="section-label">Section {section.number}</p>
           <h2 className="section-title">{section.title}</h2>
         </div>
         <div className="section-badge">{section.number}</div>
@@ -873,9 +864,9 @@ function BuildThisModal({
                 <span className="build-modal-price-note">one-time</span>
               </div>
               <ul className="build-modal-perks">
-                <li>✓ Full source code for your MVP</li>
-                <li>✓ Private GitHub repo delivered to you</li>
-                <li>✓ Step-by-step deployment guide</li>
+                <li>Full source code for your MVP</li>
+                <li>Private GitHub repo delivered to you</li>
+                <li>Step-by-step deployment guide</li>
               </ul>
             </div>
             <p className="build-modal-question">Are you interested?</p>
@@ -891,8 +882,7 @@ function BuildThisModal({
         {/* ── Yes / Maybe confirmed ── */}
         {step === "yes_maybe" && (
           <div className="build-modal-confirm">
-            <div className="build-modal-confirm-icon">🚀</div>
-            <h2 className="build-modal-title">You're on the list 🎉</h2>
+            <h2 className="build-modal-title">You're on the list</h2>
             <p className="build-modal-sub">
               We're launching this in the next few days. You'll be the first to know — we'll reach out on your registered email, the moment it's live.
             </p>
@@ -927,7 +917,6 @@ function BuildThisModal({
         {/* ── Done (after no + feedback) ── */}
         {step === "done" && (
           <div className="build-modal-confirm">
-            <div className="build-modal-confirm-icon">🙏</div>
             <h2 className="build-modal-title">Thanks for the feedback</h2>
             <p className="build-modal-sub">We read every response. This helps us build something you'd actually use.</p>
             <button className="build-modal-link-btn" onClick={onClose}>Back to blueprint</button>
@@ -1315,7 +1304,6 @@ export default function BlueprintPage() {
         .section-header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:18px; }
         .section-header-left { flex:1; }
         .section-label { font-size:11px; font-weight:500; letter-spacing:0.06em; text-transform:uppercase; color:#aaa; margin-bottom:5px; }
-        .section-icon { margin-right:6px; }
         .section-title { font-size:20px; font-weight:600; color:#111; letter-spacing:-0.2px; }
         .section-badge { min-width:36px; height:36px; border-radius:10px; background:#f4f4f2; border:1px solid #e8e8e5; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; color:#666; flex-shrink:0; }
         .section-body { font-size:15px; color:#444; line-height:1.75; }
