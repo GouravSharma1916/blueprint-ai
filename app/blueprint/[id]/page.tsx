@@ -8,15 +8,26 @@ type Confidence = "High" | "Medium" | "Low";
 type Complexity = "Low" | "Medium" | "High";
 type ChannelType = "Inbound" | "Outbound" | "Community" | "Paid" | "Partnership";
 type EffortLevel = "Low" | "Medium" | "High";
+type RiskCategory = "Market" | "Execution" | "Assumption";
+type Severity = "Critical" | "High" | "Medium";
 
 interface BlueprintScore { value: number; confidence: Confidence; reason: string; }
+
+interface TopRisk {
+  title: string;
+  category: RiskCategory;
+  severity: Severity;
+  detail: string;
+  whatWouldProveThisWrong: string;
+}
+interface HiddenAssumption { assumption: string; ifWrong: string; }
+interface RiskProfile { headline: string; topRisks: TopRisk[]; hiddenAssumptions: HiddenAssumption[]; }
 
 interface BuildEstimateItem { feature: string; soloTime: string; complexity: Complexity; note: string; }
 interface BuildEstimate {
   soloTimeline: string; teamTimeline: string; confidence: Confidence; summary: string;
   breakdown: BuildEstimateItem[]; hiddenComplexity: string; fastestPath: string; recommendedStack: string[];
 }
-
 interface GtmPlaybookStep { step: number; action: string; who: string; where: string; what: string; signal: string; }
 interface GtmChannel { name: string; type: ChannelType; description: string; timeToFirstResult: string; effort: EffortLevel; }
 interface GtmStrategy {
@@ -27,18 +38,54 @@ interface GtmStrategy {
   northStarMetric: { metric: string; target: string; why: string; };
   gtmRisks: string[];
 }
-
 interface BlueprintSection { number: number; title: string; content: string; }
+interface ResearchSource {
+  title: string;
+  url: string;
+  category: "Competitor" | "Market size" | "Reddit" | "Past failure";
+}
 interface Blueprint {
   score: BlueprintScore;
+  riskProfile?: RiskProfile;
   buildEstimate?: BuildEstimate;
   gtmStrategy?: GtmStrategy;
+  researchSources?: ResearchSource[];
   sections: BlueprintSection[];
 }
 
 const SECTION_META: Record<number, { accent?: string }> = {
   8:{accent:"risk"},11:{accent:"founder"},
 };
+
+// ── Linkify: turns any raw http(s) URL inside a string into a real clickable <a> ──
+function linkify(text: string): React.ReactNode {
+  if (!text) return text;
+  const urlRegex = /(https?:\/\/[^\s)]+)/g;
+  if (!urlRegex.test(text)) return text;
+  const parts = text.split(urlRegex);
+  return parts.map((part, i) => {
+    if (/^https?:\/\//.test(part)) {
+      let href = part;
+      let trailing = "";
+      const trailingMatch = href.match(/([.),\]]+)$/);
+      if (trailingMatch) {
+        trailing = trailingMatch[1];
+        href = href.slice(0, -trailing.length);
+      }
+      let label = href;
+      try { label = new URL(href).hostname; } catch { /* keep raw href as label */ }
+      return (
+        <span key={i}>
+          <a href={href} target="_blank" rel="noopener noreferrer" className="inline-link">
+            {label}
+          </a>
+          {trailing}
+        </span>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
 
 function renderContent(content: string, accent?: string) {
   if (accent === "founder") {
@@ -48,48 +95,105 @@ function renderContent(content: string, accent?: string) {
       const doNotLines = doNotMatch[3].trim().split("\n").filter(Boolean);
       return (
         <>
-          {before && <p className="section-para" style={{ marginBottom: "16px" }}>{before}</p>}
+          {before && <p className="section-para" style={{ marginBottom: "16px" }}>{linkify(before)}</p>}
           <div className="do-not-box">
             <p className="do-not-label">Do Not Build This If...</p>
-            <ul className="do-not-list">
-              {doNotLines.map((l, i) => <li key={i}>{l.replace(/^[-•*\d.]\s*/, "")}</li>)}
-            </ul>
+            <ul className="do-not-list">{doNotLines.map((l, i) => <li key={i}>{linkify(l.replace(/^[-•*\d.]\s*/, ""))}</li>)}</ul>
           </div>
         </>
       );
     }
-    return <div className="founder-quote">{content}</div>;
+    return <div className="founder-quote">{linkify(content)}</div>;
   }
   const lines = content.split("\n").filter(Boolean);
   const isList = lines.length > 1 && lines.every((l) => /^[-•*\d]/.test(l.trim()));
-  if (isList) {
-    return <ul className="section-list">{lines.map((l, i) => <li key={i}>{l.replace(/^[-•*\d.]\s*/, "")}</li>)}</ul>;
-  }
-  return <>{lines.map((l, i) => <p key={i} className="section-para">{l}</p>)}</>;
+  if (isList) return <ul className="section-list">{lines.map((l, i) => <li key={i}>{linkify(l.replace(/^[-•*\d.]\s*/, ""))}</li>)}</ul>;
+  return <>{lines.map((l, i) => <p key={i} className="section-para">{linkify(l)}</p>)}</>;
+}
+
+function RiskProfileCard({ risk }: { risk: RiskProfile }) {
+  const severityColors: Record<Severity, { bg: string; text: string; border: string }> = {
+    Critical: { bg: "#fee2e2", text: "#991b1b", border: "#fecaca" },
+    High:     { bg: "#ffedd5", text: "#9a3412", border: "#fed7aa" },
+    Medium:   { bg: "#fef9c3", text: "#854d0e", border: "#fef08a" },
+  };
+  const categoryLabel: Record<RiskCategory, string> = {
+    Market: "Market risk",
+    Execution: "Execution risk",
+    Assumption: "Untested assumption",
+  };
+  return (
+    <div className="risk-card">
+      <div className="risk-card-top">
+        <p className="risk-card-eyebrow">The real risk assessment</p>
+        <h2 className="risk-card-headline">{linkify(risk.headline)}</h2>
+      </div>
+      <div className="risk-list">
+        {risk.topRisks.map((r, i) => {
+          const sc = severityColors[r.severity] ?? severityColors.Medium;
+          return (
+            <div key={i} className="risk-row">
+              <div className="risk-row-top">
+                <div className="risk-row-heading">
+                  <span className="risk-category-tag">{categoryLabel[r.category] ?? r.category}</span>
+                  <h3 className="risk-row-title">{r.title}</h3>
+                </div>
+                <span className="severity-badge" style={{ background: sc.bg, color: sc.text, borderColor: sc.border }}>
+                  {r.severity}
+                </span>
+              </div>
+              <p className="risk-row-detail">{linkify(r.detail)}</p>
+              <div className="risk-row-test">
+                <span className="risk-row-test-label">Test this in days</span>
+                <span className="risk-row-test-text">{linkify(r.whatWouldProveThisWrong)}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {risk.hiddenAssumptions?.length > 0 && (
+        <div className="assumptions-block">
+          <p className="assumptions-title">Hidden assumptions this idea depends on</p>
+          <div className="assumptions-list">
+            {risk.hiddenAssumptions.map((a, i) => (
+              <div key={i} className="assumption-row">
+                <div className="assumption-marker" />
+                <div className="assumption-body">
+                  <p className="assumption-text">{linkify(a.assumption)}</p>
+                  <p className="assumption-if-wrong"><span>If wrong:</span> {linkify(a.ifWrong)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function ScoreCard({ score }: { score: BlueprintScore }) {
   const colors: Record<Confidence, { bg: string; text: string; dot: string }> = {
-    High:   { bg: "#dcfce7", text: "#166534", dot: "#16a34a" },
+    High: { bg: "#dcfce7", text: "#166534", dot: "#16a34a" },
     Medium: { bg: "#fef9c3", text: "#854d0e", dot: "#ca8a04" },
-    Low:    { bg: "#fee2e2", text: "#991b1b", dot: "#dc2626" },
+    Low: { bg: "#fee2e2", text: "#991b1b", dot: "#dc2626" },
   };
   const c = colors[score.confidence] ?? colors.Medium;
   return (
-    <div className="score-card">
+    <div className="score-card score-card--secondary">
       <div className="score-left">
         <p className="score-label">Blueprint Score</p>
         <div className="score-number-row">
           <span className="score-number">{score.value}</span>
           <span className="score-denom">/10</span>
         </div>
+        <p className="score-caveat">A compressed signal, not a verdict — read the reasoning</p>
       </div>
       <div className="score-right">
         <div className="confidence-badge" style={{ background: c.bg, color: c.text }}>
           <span className="confidence-dot" style={{ background: c.dot }} />
           {score.confidence} Confidence
         </div>
-        <p className="score-reason">{score.reason}</p>
+        <p className="score-reason">{linkify(score.reason)}</p>
       </div>
     </div>
   );
@@ -117,7 +221,7 @@ function BuildEstimateCard({ estimate }: { estimate: BuildEstimate }) {
           </div>
         </div>
       </div>
-      <p className="build-summary">{estimate.summary}</p>
+      <p className="build-summary">{linkify(estimate.summary)}</p>
       <div className="build-breakdown">
         {estimate.breakdown.map((item, i) => {
           const c = complexityColors[item.complexity] ?? complexityColors.Medium;
@@ -130,13 +234,13 @@ function BuildEstimateCard({ estimate }: { estimate: BuildEstimate }) {
                   <span className="build-row-time">{item.soloTime}</span>
                 </div>
               </div>
-              <p className="build-row-note">{item.note}</p>
+              <p className="build-row-note">{linkify(item.note)}</p>
             </div>
           );
         })}
       </div>
-      {estimate.hiddenComplexity && <div className="build-warning"><p className="build-warning-label">Hidden complexity</p><p className="build-warning-text">{estimate.hiddenComplexity}</p></div>}
-      {estimate.fastestPath && <div className="build-fastpath"><p className="build-fastpath-label">Fastest path to signal</p><p className="build-fastpath-text">{estimate.fastestPath}</p></div>}
+      {estimate.hiddenComplexity && <div className="build-warning"><p className="build-warning-label">Hidden complexity</p><p className="build-warning-text">{linkify(estimate.hiddenComplexity)}</p></div>}
+      {estimate.fastestPath && <div className="build-fastpath"><p className="build-fastpath-label">Fastest path to signal</p><p className="build-fastpath-text">{linkify(estimate.fastestPath)}</p></div>}
       {estimate.recommendedStack?.length > 0 && (
         <div className="build-stack">
           <p className="build-stack-label">Recommended stack</p>
@@ -154,10 +258,10 @@ function GtmCard({ gtm }: { gtm: GtmStrategy }) {
     High: { bg: "#fee2e2", text: "#991b1b" },
   };
   const channelTypeColors: Record<ChannelType, { bg: string; text: string }> = {
-    Inbound:     { bg: "#eff6ff", text: "#1d4ed8" },
-    Outbound:    { bg: "#faf5ff", text: "#7e22ce" },
-    Community:   { bg: "#fff7ed", text: "#c2410c" },
-    Paid:        { bg: "#fef9c3", text: "#854d0e" },
+    Inbound: { bg: "#eff6ff", text: "#1d4ed8" },
+    Outbound: { bg: "#faf5ff", text: "#7e22ce" },
+    Community: { bg: "#fff7ed", text: "#c2410c" },
+    Paid: { bg: "#fef9c3", text: "#854d0e" },
     Partnership: { bg: "#f0fdf4", text: "#166534" },
   };
   return (
@@ -170,14 +274,14 @@ function GtmCard({ gtm }: { gtm: GtmStrategy }) {
             <span className="gtm-pricing-value">{gtm.pricingModel.recommendation}</span>
             <span className="gtm-pricing-model">{gtm.pricingModel.model}</span>
           </div>
-          <p className="gtm-pricing-reason">{gtm.pricingModel.reasoning}</p>
+          <p className="gtm-pricing-reason">{linkify(gtm.pricingModel.reasoning)}</p>
         </div>
       </div>
       <div className="gtm-section">
         <p className="gtm-section-title">Fastest path to first paying customer</p>
         <div className="gtm-fastest-box">
           <p className="gtm-fastest-channel">{gtm.fastestChannel.channel}</p>
-          <p className="gtm-fastest-why">{gtm.fastestChannel.why}</p>
+          <p className="gtm-fastest-why">{linkify(gtm.fastestChannel.why)}</p>
         </div>
       </div>
       <div className="gtm-section">
@@ -187,13 +291,13 @@ function GtmCard({ gtm }: { gtm: GtmStrategy }) {
             <div key={step.step} className="gtm-step">
               <div className="gtm-step-header">
                 <span className="gtm-step-num">Step {step.step}</span>
-                <span className="gtm-step-action">{step.action}</span>
+                <span className="gtm-step-action">{linkify(step.action)}</span>
               </div>
               <div className="gtm-step-grid">
-                <div className="gtm-step-item"><span className="gtm-step-item-label">Who</span><span className="gtm-step-item-value">{step.who}</span></div>
-                <div className="gtm-step-item"><span className="gtm-step-item-label">Where</span><span className="gtm-step-item-value">{step.where}</span></div>
-                <div className="gtm-step-item"><span className="gtm-step-item-label">What to say</span><span className="gtm-step-item-value">{step.what}</span></div>
-                <div className="gtm-step-item"><span className="gtm-step-item-label">Signal</span><span className="gtm-step-item-value gtm-step-signal">{step.signal}</span></div>
+                <div className="gtm-step-item"><span className="gtm-step-item-label">Who</span><span className="gtm-step-item-value">{linkify(step.who)}</span></div>
+                <div className="gtm-step-item"><span className="gtm-step-item-label">Where</span><span className="gtm-step-item-value">{linkify(step.where)}</span></div>
+                <div className="gtm-step-item"><span className="gtm-step-item-label">What to say</span><span className="gtm-step-item-value">{linkify(step.what)}</span></div>
+                <div className="gtm-step-item"><span className="gtm-step-item-label">Signal</span><span className="gtm-step-item-value gtm-step-signal">{linkify(step.signal)}</span></div>
               </div>
             </div>
           ))}
@@ -215,7 +319,7 @@ function GtmCard({ gtm }: { gtm: GtmStrategy }) {
                     <span className="gtm-channel-time">{ch.timeToFirstResult}</span>
                   </div>
                 </div>
-                <p className="gtm-channel-desc">{ch.description}</p>
+                <p className="gtm-channel-desc">{linkify(ch.description)}</p>
               </div>
             );
           })}
@@ -228,15 +332,51 @@ function GtmCard({ gtm }: { gtm: GtmStrategy }) {
             <span className="gtm-metric-name">{gtm.northStarMetric.metric}</span>
             <span className="gtm-metric-target">{gtm.northStarMetric.target}</span>
           </div>
-          <p className="gtm-metric-why">{gtm.northStarMetric.why}</p>
+          <p className="gtm-metric-why">{linkify(gtm.northStarMetric.why)}</p>
         </div>
       </div>
       {gtm.gtmRisks?.length > 0 && (
         <div className="gtm-section">
           <p className="gtm-section-title">GTM risks</p>
-          <ul className="gtm-risks">{gtm.gtmRisks.map((r, i) => <li key={i}>{r}</li>)}</ul>
+          <ul className="gtm-risks">{gtm.gtmRisks.map((r, i) => <li key={i}>{linkify(r)}</li>)}</ul>
         </div>
       )}
+    </div>
+  );
+}
+
+function ResearchSourcesCard({ sources }: { sources: ResearchSource[] }) {
+  const byCategory: Record<string, ResearchSource[]> = {
+    "Competitor": sources.filter(s => s.category === "Competitor"),
+    "Market size": sources.filter(s => s.category === "Market size"),
+    "Reddit": sources.filter(s => s.category === "Reddit"),
+    "Past failure": sources.filter(s => s.category === "Past failure"),
+  };
+  const meta: Record<string, string> = {
+    "Competitor": "Competitors found",
+    "Market size": "Market size data",
+    "Reddit": "Reddit threads",
+    "Past failure": "Past failures",
+  };
+  if (!sources.length) return null;
+  return (
+    <div className="research-card">
+      <p className="research-label">Research Sources</p>
+      <p className="research-sub">Competitor analysis and market data grounded in live web research — not training knowledge.</p>
+      {Object.entries(byCategory).map(([cat, items]) => {
+        if (!items.length) return null;
+        return (
+          <div key={cat} className="research-section">
+            <p className="research-section-title">{meta[cat]}</p>
+            {items.map((s, i) => (
+              <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" className="research-source-row">
+                <span className="research-source-title">{s.title}</span>
+                <span className="research-source-url">{(() => { try { return new URL(s.url).hostname; } catch { return s.url; } })()}</span>
+              </a>
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -262,7 +402,6 @@ async function generatePDF(blueprint: Blueprint) {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const pageWidth = 210, margin = 20, contentWidth = pageWidth - margin * 2;
   let y = 0;
-
   function checkPageBreak(needed: number) { if (y + needed > 272) { doc.addPage(); y = 20; } }
   function addText(text: string, fontSize: number, color: [number,number,number], bold = false, xOffset = 0) {
     doc.setFontSize(fontSize); doc.setTextColor(...color); doc.setFont("helvetica", bold ? "bold" : "normal");
@@ -271,12 +410,22 @@ async function generatePDF(blueprint: Blueprint) {
     checkPageBreak(lines.length * lineH + 2);
     doc.text(lines, margin + xOffset, y); y += lines.length * lineH + 2;
   }
-
   doc.setFillColor(17,17,17); doc.rect(0,0,210,30,"F");
   doc.setFontSize(20); doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.text("Blueprint AI", margin, 17);
   doc.setFontSize(9); doc.setFont("helvetica","normal"); doc.setTextColor(180,180,180);
   doc.text("AI-generated startup blueprint  ·  blueprintai.com", margin, 24);
   y = 40;
+
+  if (blueprint.riskProfile) {
+    const rp = blueprint.riskProfile;
+    doc.setFillColor(255,248,248); doc.roundedRect(margin,y,contentWidth,20,3,3,"F");
+    doc.setFillColor(220,38,38); doc.roundedRect(margin,y,3,20,1,1,"F");
+    doc.setFontSize(8); doc.setTextColor(153,27,27); doc.setFont("helvetica","bold");
+    doc.text("THE REAL RISK", margin+8, y+8);
+    doc.setFontSize(9.5); doc.setTextColor(60,60,60); doc.setFont("helvetica","normal");
+    const hl = doc.splitTextToSize(rp.headline, contentWidth-16); doc.text(hl, margin+8, y+15);
+    y += 26;
+  }
 
   const scoreRGB: [number,number,number] = blueprint.score.confidence === "High" ? [22,101,52] : blueprint.score.confidence === "Low" ? [153,27,27] : [133,77,14];
   const scoreBgRGB: [number,number,number] = blueprint.score.confidence === "High" ? [240,253,244] : blueprint.score.confidence === "Low" ? [254,242,242] : [254,252,232];
@@ -306,7 +455,7 @@ async function generatePDF(blueprint: Blueprint) {
     if (be.hiddenComplexity) { checkPageBreak(12); doc.setFontSize(9); doc.setTextColor(220,38,38); doc.setFont("helvetica","bold"); doc.text("Hidden complexity:", margin, y); y += 4.5; addText(be.hiddenComplexity, 9, [85,85,85]); }
     if (be.fastestPath) { checkPageBreak(12); doc.setFontSize(9); doc.setTextColor(22,163,74); doc.setFont("helvetica","bold"); doc.text("Fastest path:", margin, y); y += 4.5; addText(be.fastestPath, 9, [85,85,85]); }
     if (be.recommendedStack?.length) { checkPageBreak(10); doc.setFontSize(9); doc.setTextColor(120,120,120); doc.setFont("helvetica","normal"); doc.text(`Stack: ${be.recommendedStack.join(", ")}`, margin, y); y += 6; }
-    y += 6; doc.setDrawColor(230,230,228); doc.line(margin, y, margin+contentWidth, y); y += 8;
+    y += 6; doc.setDrawColor(230,230,228); doc.line(margin,y,margin+contentWidth,y); y += 8;
   }
 
   if (blueprint.gtmStrategy) {
@@ -350,7 +499,7 @@ async function generatePDF(blueprint: Blueprint) {
         const rl = doc.splitTextToSize(risk, contentWidth-8); doc.text(rl, margin+7, y); y += rl.length*4+2;
       }
     }
-    y += 6; doc.setDrawColor(230,230,228); doc.line(margin, y, margin+contentWidth, y); y += 8;
+    y += 6; doc.setDrawColor(230,230,228); doc.line(margin,y,margin+contentWidth,y); y += 8;
   }
 
   for (const section of blueprint.sections) {
@@ -371,7 +520,6 @@ async function generatePDF(blueprint: Blueprint) {
     } else { addText(section.content, 9, [68,68,68]); }
     y += 8;
   }
-
   const total = doc.getNumberOfPages();
   for (let i = 1; i <= total; i++) {
     doc.setPage(i); doc.setFillColor(245,245,243); doc.rect(0,284,210,13,"F");
@@ -413,8 +561,7 @@ export default function SavedBlueprintPage() {
     }
     if (blueprint.gtmStrategy) {
       const gtm = blueprint.gtmStrategy;
-      text += `GO-TO-MARKET STRATEGY\n`;
-      text += `Pricing: ${gtm.pricingModel.recommendation} — ${gtm.pricingModel.model}\n${gtm.pricingModel.reasoning}\n`;
+      text += `GO-TO-MARKET STRATEGY\nPricing: ${gtm.pricingModel.recommendation} — ${gtm.pricingModel.model}\n${gtm.pricingModel.reasoning}\n`;
       text += `Fastest channel: ${gtm.fastestChannel.channel}\n${gtm.fastestChannel.why}\n\nFirst 100 Users:\n`;
       gtm.first100Playbook.forEach(s => { text += `Step ${s.step}: ${s.action}\n  Who: ${s.who}\n  Where: ${s.where}\n  What: ${s.what}\n  Signal: ${s.signal}\n`; });
       text += `\nNorth Star: ${gtm.northStarMetric.metric} — ${gtm.northStarMetric.target}\n${gtm.northStarMetric.why}\n\n`;
@@ -426,8 +573,7 @@ export default function SavedBlueprintPage() {
   async function handleDownloadPDF() {
     if (!blueprint || pdfLoading) return;
     setPdfLoading(true);
-    try { await generatePDF(blueprint); }
-    finally { setPdfLoading(false); }
+    try { await generatePDF(blueprint); } finally { setPdfLoading(false); }
   }
 
   if (loading) return (
@@ -463,7 +609,7 @@ export default function SavedBlueprintPage() {
         <div className="bp-hero-inner">
           <div className="status-badge"><span className="status-dot" />Saved blueprint</div>
           <h1 className="bp-hero-title">Your product blueprint</h1>
-          <p className="bp-hero-sub">Score · Build estimate · GTM strategy · 12-section analysis</p>
+          <p className="bp-hero-sub">Risks & hidden assumptions · Score · Build estimate · GTM strategy</p>
           <div className="bp-hero-actions">
             <button className="action-btn" onClick={handleCopy}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
@@ -485,13 +631,17 @@ export default function SavedBlueprintPage() {
       <div className="bp-meta-bar">
         <span className="meta-pill">{blueprint.sections.length} sections</span>
         <div className="meta-divider" />
-        <span className="meta-text">Score · Build Estimate · GTM · ICP · MVP · Risks · 30-Day Plan</span>
+        <span className="meta-text">Risks · Assumptions · Score · Build Estimate · GTM · ICP · MVP · 30-Day Plan</span>
       </div>
 
       <div className="bp-score-wrap">
+        {blueprint.riskProfile && <RiskProfileCard risk={blueprint.riskProfile} />}
         <ScoreCard score={blueprint.score} />
         {blueprint.buildEstimate && <BuildEstimateCard estimate={blueprint.buildEstimate} />}
         {blueprint.gtmStrategy && <GtmCard gtm={blueprint.gtmStrategy} />}
+        {blueprint.researchSources && blueprint.researchSources.length > 0 && (
+          <ResearchSourcesCard sources={blueprint.researchSources} />
+        )}
       </div>
 
       <div className="bp-sections">
@@ -532,12 +682,41 @@ export default function SavedBlueprintPage() {
         .meta-divider { width:1px; height:14px; background:#ddd; }
         .meta-text { font-size:12px; color:#aaa; }
         .bp-score-wrap { max-width:720px; margin:16px auto 0; padding:0 24px; display:flex; flex-direction:column; gap:12px; }
+
+        .risk-card { background:#18120f; border:1px solid #2c2420; border-radius:18px; padding:28px 28px 24px; color:#f5f0ec; }
+        .risk-card-top { margin-bottom:20px; }
+        .risk-card-eyebrow { font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:#f87171; margin-bottom:10px; }
+        .risk-card-headline { font-family:'Instrument Serif',serif; font-size:24px; font-weight:400; line-height:1.35; color:#fff; }
+        .risk-list { display:flex; flex-direction:column; gap:12px; margin-bottom:20px; }
+        .risk-row { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:16px 18px; }
+        .risk-row-top { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:8px; }
+        .risk-row-heading { display:flex; flex-direction:column; gap:4px; }
+        .risk-category-tag { font-size:10.5px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; color:#c7bfb8; }
+        .risk-row-title { font-size:15.5px; font-weight:600; color:#fff; }
+        .severity-badge { font-size:10.5px; font-weight:700; border-radius:99px; padding:3px 10px; border:1px solid; flex-shrink:0; white-space:nowrap; }
+        .risk-row-detail { font-size:13.5px; color:#d8d0c9; line-height:1.65; margin-bottom:12px; }
+        .risk-row-test { display:flex; flex-direction:column; gap:2px; background:rgba(255,255,255,0.05); border-radius:8px; padding:10px 12px; }
+        .risk-row-test-label { font-size:10px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:#86efac; }
+        .risk-row-test-text { font-size:12.5px; color:#e5e0da; line-height:1.5; }
+        .assumptions-block { padding-top:18px; border-top:1px solid rgba(255,255,255,0.1); }
+        .assumptions-title { font-size:12px; font-weight:600; letter-spacing:0.03em; color:#c7bfb8; margin-bottom:12px; }
+        .assumptions-list { display:flex; flex-direction:column; gap:10px; }
+        .assumption-row { display:flex; gap:10px; align-items:flex-start; }
+        .assumption-marker { width:6px; height:6px; border-radius:50%; background:#f59e0b; margin-top:6px; flex-shrink:0; }
+        .assumption-body { flex:1; }
+        .assumption-text { font-size:13.5px; color:#f0e9e2; line-height:1.6; margin-bottom:3px; }
+        .assumption-if-wrong { font-size:12.5px; color:#a89f96; line-height:1.55; }
+        .assumption-if-wrong span { font-weight:600; color:#c7bfb8; }
+
         .score-card { background:#fff; border:1px solid #e8e8e5; border-radius:16px; padding:24px 28px; display:flex; gap:24px; align-items:flex-start; flex-wrap:wrap; }
+        .score-card--secondary { padding:18px 24px; }
         .score-left { flex-shrink:0; }
         .score-label { font-size:11px; font-weight:500; letter-spacing:0.06em; text-transform:uppercase; color:#aaa; margin-bottom:6px; }
         .score-number-row { display:flex; align-items:flex-end; gap:4px; }
+        .score-card--secondary .score-number { font-size:38px; }
         .score-number { font-family:'Instrument Serif',serif; font-size:56px; line-height:1; color:#111; }
         .score-denom { font-size:22px; color:#bbb; margin-bottom:6px; }
+        .score-caveat { font-size:10.5px; color:#bbb; margin-top:6px; max-width:140px; line-height:1.4; }
         .score-right { flex:1; min-width:200px; }
         .confidence-badge { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:500; border-radius:99px; padding:5px 12px; margin-bottom:12px; }
         .confidence-dot { width:6px; height:6px; border-radius:50%; }
@@ -607,6 +786,18 @@ export default function SavedBlueprintPage() {
         .gtm-metric-why { font-size:13px; color:#666; line-height:1.65; }
         .gtm-risks { padding-left:18px; margin:0; display:flex; flex-direction:column; gap:6px; }
         .gtm-risks li { font-size:13px; color:#555; line-height:1.6; }
+        .research-card { background:#fff; border:1px solid #e8e8e5; border-radius:16px; padding:24px 28px; }
+        .research-label { font-size:11px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:#aaa; margin-bottom:6px; }
+        .research-sub { font-size:13px; color:#888; line-height:1.6; margin-bottom:20px; }
+        .research-section { margin-bottom:18px; }
+        .research-section:last-child { margin-bottom:0; }
+        .research-section-title { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:#bbb; margin-bottom:8px; }
+        .research-source-row { display:flex; align-items:baseline; justify-content:space-between; gap:12px; padding:8px 10px; background:#f8f8f7; border-radius:8px; margin-bottom:4px; text-decoration:none; transition:background 0.15s; }
+        .research-source-row:hover { background:#f0f0ee; }
+        .research-source-title { font-size:13px; color:#333; line-height:1.5; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .research-source-url { font-size:11px; color:#aaa; flex-shrink:0; }
+        .inline-link { color:#2563eb; text-decoration:underline; text-decoration-color:#bfdbfe; word-break:break-word; }
+        .inline-link:hover { color:#1d4ed8; }
         .bp-sections { max-width:720px; margin:0 auto; padding:16px 24px 48px; display:flex; flex-direction:column; gap:12px; }
         .section-card { background:#fff; border:1px solid #e8e8e5; border-radius:16px; padding:28px 28px 24px; animation:fadeUp 0.4s ease both; transition:box-shadow 0.2s; }
         .section-card:hover { box-shadow:0 4px 20px rgba(0,0,0,0.05); }
@@ -643,6 +834,8 @@ export default function SavedBlueprintPage() {
           .build-header { flex-direction:column; align-items:flex-start; }
           .gtm-step-grid { grid-template-columns:1fr; }
           .bp-nav-right { gap:8px; }
+          .risk-card { padding:22px 20px 20px; }
+          .risk-row-top { flex-direction:column; }
         }
       `}</style>
     </main>

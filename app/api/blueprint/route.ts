@@ -1,6 +1,15 @@
+import { researchIdea, formatResearchForPrompt, extractSources } from "@/lib/research";
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+    const { idea = "", problem = "" } = body;
+
+    // ── Research step (runs before DeepSeek) ──
+    const research = await researchIdea(idea, problem);
+    const researchBlock = formatResearchForPrompt(research);
+    const sources = extractSources(research);
+    // ──────────────────────────────────────────
 
     const prompt = `
 You are a brutally honest YC partner, startup strategist, and experienced product founder.
@@ -40,6 +49,16 @@ SCORE CALIBRATION:
 - 6-7: Decent idea but missing something critical — unclear differentiation, weak timing, or vague customer.
 - 4-5: Idea exists already or the founder hasn't thought it through. Needs major rethinking.
 - 1-3: Do not build this. Explain exactly why.
+- The score is a compressed signal, not a verdict on its own. score.reason MUST name what it is actually based on (e.g. "specificity of the customer answer, competitive crowding found in research, timing") so the founder knows what moved the number — never leave it as unexplained opinion.
+
+RISK & HIDDEN-ASSUMPTION SURFACING RULES — THIS IS THE HERO OF THE PRODUCT, TREAT IT AS THE MOST IMPORTANT OUTPUT YOU PRODUCE:
+- This is the part a generic chatbot cannot reproduce, because it requires actually reading the founder's specific answers for what they are quietly assuming and did not defend.
+- topRisks must contain exactly 3 risks, each a DIFFERENT category: one "Market" risk (grounded in a real competitor or crowding found in research — name it), one "Execution" risk (the hardest specific thing to build or sell for THIS idea), and one "Assumption" risk (something the founder is treating as true that has not been tested).
+- Each risk's "detail" must reference the founder's specific words or specific plan — not a generic risk that could apply to any startup.
+- "whatWouldProveThisWrong" must be a cheap, fast, concrete test — something doable in days, not a vague "talk to users".
+- hiddenAssumptions must contain 2-3 load-bearing beliefs the founder never stated out loud but the whole plan depends on. For each: name the assumption in one sentence, then name exactly what breaks in the business if it turns out false.
+- riskProfile.headline is a single blunt sentence — the one thing most likely to kill this specific idea, stated plainly, no hedging.
+- Do not repeat the exact same sentence between riskProfile and Section 8 ("Biggest Risks") — riskProfile is the sharp, scannable version; Section 8 can go deeper into the same three risks.
 
 BUILD TIME ESTIMATION RULES:
 - This estimate must be derived from the SAME features you define in Section 6 (MVP Scope). Do not invent a different feature set for the estimate.
@@ -59,13 +78,59 @@ GTM STRATEGY RULES:
 - Identify the single channel most likely to produce the first paying customer for THIS idea — not the biggest long-term channel, the fastest path to one real paying customer.
 - Name the one metric that proves GTM is working at the 30-day mark. Not "signups" — a metric that shows the customer got value, not just clicked a link.
 
+────────────────────────────────────────────────────
+REAL-WORLD RESEARCH (treat as ground truth — not your training knowledge):
+
+${researchBlock}
+
+RULES FOR USING THIS RESEARCH:
+- When naming competitors in Section 4 and Section 12, you MUST reference specific companies found in the research above with their URLs.
+- When discussing market size, cite the specific figures or reports found above.
+- When discussing risks, reference any past failures found above by name.
+- When discussing Reddit sentiment, reference what real users said in those threads.
+- If research found nothing for a category, say "No public data found" — never hallucinate competitors, market figures, or failures not present in the research.
+- Do not invent any company, product, statistic, or source not present in the research above.
+────────────────────────────────────────────────────
+
 OUTPUT: Return exactly this JSON structure and nothing else:
 
 {
   "score": {
     "value": 7.8,
     "confidence": "Medium",
-    "reason": "2-3 sentences. Be specific about what earned the score and what is holding it back. Reference the founder's actual idea directly."
+    "reason": "2-3 sentences. Be specific about what earned the score and what is holding it back. Name what the score is actually based on (specificity of answers, competitive crowding, timing) — never leave it unexplained."
+  },
+  "riskProfile": {
+    "headline": "One blunt sentence: the single biggest reason this specific idea could fail. No hedging, no encouragement.",
+    "topRisks": [
+      {
+        "title": "3-5 word risk name",
+        "category": "Market",
+        "severity": "Critical | High | Medium",
+        "detail": "2-3 sentences naming the specific competitor(s) from research or the specific crowding problem, referencing the founder's stated differentiation.",
+        "whatWouldProveThisWrong": "One sentence: a cheap, fast, concrete test doable in days."
+      },
+      {
+        "title": "3-5 word risk name",
+        "category": "Execution",
+        "severity": "Critical | High | Medium",
+        "detail": "2-3 sentences naming the exact hardest thing to build or sell for THIS idea.",
+        "whatWouldProveThisWrong": "One sentence: a cheap, fast, concrete test doable in days."
+      },
+      {
+        "title": "3-5 word risk name",
+        "category": "Assumption",
+        "severity": "Critical | High | Medium",
+        "detail": "2-3 sentences naming an untested belief the founder is treating as fact, quoting or referencing their actual answer.",
+        "whatWouldProveThisWrong": "One sentence: a cheap, fast, concrete test doable in days."
+      }
+    ],
+    "hiddenAssumptions": [
+      {
+        "assumption": "One sentence naming a load-bearing belief the founder never stated out loud.",
+        "ifWrong": "One sentence: exactly what breaks in the business if this turns out false."
+      }
+    ]
   },
   "buildEstimate": {
     "soloTimeline": "e.g. '3-4 weeks'",
@@ -124,6 +189,13 @@ OUTPUT: Return exactly this JSON structure and nothing else:
       "Risk 3: one sentence, specific to this idea's channel or reach challenge."
     ]
   },
+  "researchSources": [
+    {
+      "title": "page or article title",
+      "url": "full URL",
+      "category": "Competitor | Market size | Reddit | Past failure"
+    }
+  ],
   "sections": [
     {
       "number": 1,
@@ -143,12 +215,12 @@ OUTPUT: Return exactly this JSON structure and nothing else:
     {
       "number": 4,
       "title": "Why Existing Solutions Fail",
-      "content": "Name 2-3 real products or services the target user uses today to solve this problem. For each one, explain specifically why it fails this particular customer in this particular situation. This must be based on the founder's described customer — not generic market analysis."
+      "content": "Name 2-3 real products or services from the research above. For each one, explain specifically why it fails this particular customer in this particular situation. Cite the source URL where relevant."
     },
     {
       "number": 5,
       "title": "Market Timing",
-      "content": "Why is NOW the right time to build this? What changed in the last 2-3 years — in technology, user behavior, regulation, or economics — that creates a specific opening? If the timing argument is weak or missing from the founder's answers, say so directly."
+      "content": "Why is NOW the right time to build this? What changed in the last 2-3 years — in technology, user behavior, regulation, or economics — that creates a specific opening? Reference market size data from the research above if available."
     },
     {
       "number": 6,
@@ -163,7 +235,7 @@ OUTPUT: Return exactly this JSON structure and nothing else:
     {
       "number": 8,
       "title": "Biggest Risks",
-      "content": "The top 3 risks that could kill this startup. Include: one market risk (competition or lack of demand), one execution risk (what is hardest to build or sell), and one assumption the founder is making that could be completely wrong. Be specific to this idea — not generic startup risks."
+      "content": "The top 3 risks that could kill this startup. Include: one market risk (reference actual competitors found in research), one execution risk (what is hardest to build or sell), and one assumption the founder is making that could be completely wrong."
     },
     {
       "number": 9,
@@ -183,7 +255,7 @@ OUTPUT: Return exactly this JSON structure and nothing else:
     {
       "number": 12,
       "title": "Competitor Landscape",
-      "content": "Name 3 real existing products or companies that overlap with this idea. For each competitor write: what they do well, what they completely miss, and what gap that creates. Then write 1-2 sentences on where this idea could position itself to be meaningfully different — not just cheaper or faster, but solving something they fundamentally cannot. If no real differentiation exists, say that directly."
+      "content": "Name 3 real existing products from the research above. For each competitor write: what they do well, what they completely miss, and what gap that creates. Include their URLs. Then write 1-2 sentences on where this idea could position itself to be meaningfully different. If no real differentiation exists, say that directly."
     }
   ]
 }
@@ -195,15 +267,18 @@ REMINDER BEFORE YOU RESPOND:
 - Did you reference the founder's exact words in at least 6 sections? If not, rewrite.
 - Is every section specific to THIS idea? If any section could apply to a different startup, rewrite it.
 - Did you avoid all filler encouragement? If not, remove it.
-- Is the competitor landscape based on real named products? If not, fix it.
+- Are competitors from the REAL-WORLD RESEARCH above, with URLs? If not, fix it.
 - Does buildEstimate.breakdown use the exact same feature names as Section 6's MVP Scope? If not, fix it.
-- Are the build estimate ranges realistic for a solo founder, not optimistic best-case numbers? If not, fix it.
-- Is gtmStrategy.first100Playbook a step-by-step sequence with specific who/where/what/signal for each step? If not, rewrite it.
-- Is the pricing recommendation a specific number with a reason, not a vague suggestion? If not, fix it.
+- Are the build estimate ranges realistic for a solo founder? If not, fix it.
+- Is gtmStrategy.first100Playbook a step-by-step sequence with specific who/where/what/signal? If not, rewrite it.
+- Is the pricing recommendation a specific number with a reason? If not, fix it.
+- Does researchSources contain the actual URLs from the research block above? If not, fix it.
+- Does riskProfile.topRisks contain exactly 3 risks, one each of Market / Execution / Assumption, each naming something specific to THIS idea? If any could apply to a different startup, rewrite it.
+- Does riskProfile.headline read as a blunt one-sentence verdict, not a hedge? If not, rewrite it.
+- Does score.reason explicitly say what the score is based on? If it reads as unexplained opinion, fix it.
 - Is the output valid JSON with no markdown or backticks? If not, fix it.
 `;
 
-    // Request a STREAMED response from OpenRouter instead of waiting for the full completion
     const upstream = await fetch(
       "https://openrouter.ai/api/v1/chat/completions",
       {
@@ -216,7 +291,7 @@ REMINDER BEFORE YOU RESPOND:
           model: "deepseek/deepseek-chat",
           messages: [{ role: "user", content: prompt }],
           temperature: 0.6,
-          stream: true, // <-- the only change that matters to OpenRouter itself
+          stream: true,
         }),
       }
     );
@@ -230,12 +305,7 @@ REMINDER BEFORE YOU RESPOND:
       );
     }
 
-    // Re-stream OpenRouter's SSE chunks straight through to the browser.
-    // The browser-side code (blueprint/page.tsx) parses these chunks
-    // and accumulates the text as it arrives, instead of waiting ~70s for
-    // a single JSON blob.
     const reader = upstream.body.getReader();
-
     const stream = new ReadableStream({
       async start(controller) {
         try {
@@ -250,9 +320,7 @@ REMINDER BEFORE YOU RESPOND:
           controller.error(err);
         }
       },
-      cancel() {
-        reader.cancel();
-      },
+      cancel() { reader.cancel(); },
     });
 
     return new Response(stream, {

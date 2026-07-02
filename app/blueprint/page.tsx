@@ -8,11 +8,32 @@ type Confidence = "High" | "Medium" | "Low";
 type Complexity = "Low" | "Medium" | "High";
 type ChannelType = "Inbound" | "Outbound" | "Community" | "Paid" | "Partnership";
 type EffortLevel = "Low" | "Medium" | "High";
+type RiskCategory = "Market" | "Execution" | "Assumption";
+type Severity = "Critical" | "High" | "Medium";
 
 interface BlueprintScore {
   value: number;
   confidence: Confidence;
   reason: string;
+}
+
+interface TopRisk {
+  title: string;
+  category: RiskCategory;
+  severity: Severity;
+  detail: string;
+  whatWouldProveThisWrong: string;
+}
+
+interface HiddenAssumption {
+  assumption: string;
+  ifWrong: string;
+}
+
+interface RiskProfile {
+  headline: string;
+  topRisks: TopRisk[];
+  hiddenAssumptions: HiddenAssumption[];
 }
 
 interface BuildEstimateItem {
@@ -51,22 +72,11 @@ interface GtmChannel {
 }
 
 interface GtmStrategy {
-  pricingModel: {
-    recommendation: string;
-    model: string;
-    reasoning: string;
-  };
+  pricingModel: { recommendation: string; model: string; reasoning: string; };
   first100Playbook: GtmPlaybookStep[];
-  fastestChannel: {
-    channel: string;
-    why: string;
-  };
+  fastestChannel: { channel: string; why: string; };
   channels: GtmChannel[];
-  northStarMetric: {
-    metric: string;
-    target: string;
-    why: string;
-  };
+  northStarMetric: { metric: string; target: string; why: string; };
   gtmRisks: string[];
 }
 
@@ -76,10 +86,18 @@ interface BlueprintSection {
   content: string;
 }
 
+interface ResearchSource {
+  title: string;
+  url: string;
+  category: "Competitor" | "Market size" | "Reddit" | "Past failure";
+}
+
 interface Blueprint {
   score: BlueprintScore;
+  riskProfile?: RiskProfile;
   buildEstimate?: BuildEstimate;
   gtmStrategy?: GtmStrategy;
+  researchSources?: ResearchSource[];
   sections: BlueprintSection[];
 }
 
@@ -118,6 +136,7 @@ const KNOWN_SECTION_TITLES = [
 
 interface StreamProgress {
   hasScore: boolean;
+  hasResearch: boolean;
   hasBuildEstimate: boolean;
   hasGtmStrategy: boolean;
   sectionsSeen: number;
@@ -131,10 +150,41 @@ function analyzeStreamProgress(raw: string): StreamProgress {
   }
   return {
     hasScore: /"score"\s*:\s*\{[^}]*"confidence"/.test(clean),
+    hasResearch: clean.includes('"researchSources"'),
     hasBuildEstimate: clean.includes('"recommendedStack"'),
     hasGtmStrategy: clean.includes('"gtmRisks"'),
     sectionsSeen,
   };
+}
+
+// ── Linkify: turns any raw http(s) URL inside a string into a real clickable <a> ──
+function linkify(text: string): React.ReactNode {
+  if (!text) return text;
+  const urlRegex = /(https?:\/\/[^\s)]+)/g;
+  if (!urlRegex.test(text)) return text;
+  const parts = text.split(urlRegex);
+  return parts.map((part, i) => {
+    if (/^https?:\/\//.test(part)) {
+      let href = part;
+      let trailing = "";
+      const trailingMatch = href.match(/([.),\]]+)$/);
+      if (trailingMatch) {
+        trailing = trailingMatch[1];
+        href = href.slice(0, -trailing.length);
+      }
+      let label = href;
+      try { label = new URL(href).hostname; } catch { /* keep raw href as label */ }
+      return (
+        <span key={i}>
+          <a href={href} target="_blank" rel="noopener noreferrer" className="inline-link">
+            {label}
+          </a>
+          {trailing}
+        </span>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
 }
 
 function renderContent(content: string, accent?: string) {
@@ -145,32 +195,33 @@ function renderContent(content: string, accent?: string) {
       const doNotLines = doNotMatch[3].trim().split("\n").filter(Boolean);
       return (
         <>
-          {before && <p className="section-para" style={{ marginBottom: "16px" }}>{before}</p>}
+          {before && <p className="section-para" style={{ marginBottom: "16px" }}>{linkify(before)}</p>}
           <div className="do-not-box">
             <p className="do-not-label">Do Not Build This If...</p>
             <ul className="do-not-list">
-              {doNotLines.map((l, i) => <li key={i}>{l.replace(/^[-•*\d.]\s*/, "")}</li>)}
+              {doNotLines.map((l, i) => <li key={i}>{linkify(l.replace(/^[-•*\d.]\s*/, ""))}</li>)}
             </ul>
           </div>
         </>
       );
     }
-    return <div className="founder-quote">{content}</div>;
+    return <div className="founder-quote">{linkify(content)}</div>;
   }
   const lines = content.split("\n").filter(Boolean);
   const isList = lines.length > 1 && lines.every((l) => /^[-•*\d]/.test(l.trim()));
   if (isList) {
     return (
       <ul className="section-list">
-        {lines.map((l, i) => <li key={i}>{l.replace(/^[-•*\d.]\s*/, "")}</li>)}
+        {lines.map((l, i) => <li key={i}>{linkify(l.replace(/^[-•*\d.]\s*/, ""))}</li>)}
       </ul>
     );
   }
-  return <>{lines.map((l, i) => <p key={i} className="section-para">{l}</p>)}</>;
+  return <>{lines.map((l, i) => <p key={i} className="section-para">{linkify(l)}</p>)}</>;
 }
 
 const ROTATING_MESSAGES = [
   "Reading your idea closely...",
+  "Searching for real competitors...",
   "Checking who actually has this problem...",
   "Sizing up the competition...",
   "Running the numbers on build time...",
@@ -193,6 +244,7 @@ function useRotatingMessage(active: boolean, intervalMs = 2600) {
 
 const CHECKLIST_ITEMS = [
   { key: "score", label: "Score & verdict" },
+  { key: "research", label: "Researching competitors & market" },
   { key: "buildEstimate", label: "Build time estimate" },
   { key: "gtmStrategy", label: "Go-to-market strategy" },
   { key: "sections", label: "12-section deep dive" },
@@ -217,9 +269,10 @@ function LoadingScreen({
     Math.min(
       92,
       10 +
-        (progress.hasScore ? 12 : 0) +
-        (progress.hasBuildEstimate ? 16 : 0) +
-        (progress.hasGtmStrategy ? 16 : 0) +
+        (progress.hasScore ? 10 : 0) +
+        (progress.hasResearch ? 10 : 0) +
+        (progress.hasBuildEstimate ? 14 : 0) +
+        (progress.hasGtmStrategy ? 14 : 0) +
         progress.sectionsSeen * 4
     );
 
@@ -236,6 +289,7 @@ function LoadingScreen({
 
   const checklistState = (key: string) => {
     if (key === "score") return progress.hasScore;
+    if (key === "research") return progress.hasResearch;
     if (key === "buildEstimate") return progress.hasBuildEstimate;
     if (key === "gtmStrategy") return progress.hasGtmStrategy;
     if (key === "sections") return progress.sectionsSeen >= KNOWN_SECTION_TITLES.length;
@@ -254,14 +308,7 @@ function LoadingScreen({
               const cx = 100 + 64 * Math.cos(angle);
               const cy = 100 + 64 * Math.sin(angle);
               return (
-                <circle
-                  key={i}
-                  cx={cx}
-                  cy={cy}
-                  r="6"
-                  fill="#fff"
-                  stroke="#111"
-                  strokeWidth="1"
+                <circle key={i} cx={cx} cy={cy} r="6" fill="#fff" stroke="#111" strokeWidth="1"
                   className={stage !== "error" ? "node-pulse" : ""}
                   style={{ animationDelay: `${i * -0.45}s` }}
                 />
@@ -281,11 +328,7 @@ function LoadingScreen({
         )}
 
         <div className="loading-text">
-          <h2
-            key={stage}
-            className="loading-title"
-            style={{ color: stage === "error" ? "#dc2626" : undefined }}
-          >
+          <h2 key={stage} className="loading-title" style={{ color: stage === "error" ? "#dc2626" : undefined }}>
             {stage === "error" ? "Something went wrong" : "Building your blueprint"}
           </h2>
           <p key={rotatingMessage} className="loading-desc loading-desc-rotating">
@@ -298,7 +341,6 @@ function LoadingScreen({
             <div className="progress-track">
               <div className="progress-fill" style={{ width: `${smoothPct}%` }} />
             </div>
-
             <ul className="checklist">
               {CHECKLIST_ITEMS.map((item, i) => {
                 const checked = checklistState(item.key);
@@ -375,6 +417,68 @@ function LoadingScreen({
   );
 }
 
+function RiskProfileCard({ risk }: { risk: RiskProfile }) {
+  const severityColors: Record<Severity, { bg: string; text: string; border: string }> = {
+    Critical: { bg: "#fee2e2", text: "#991b1b", border: "#fecaca" },
+    High:     { bg: "#ffedd5", text: "#9a3412", border: "#fed7aa" },
+    Medium:   { bg: "#fef9c3", text: "#854d0e", border: "#fef08a" },
+  };
+  const categoryLabel: Record<RiskCategory, string> = {
+    Market: "Market risk",
+    Execution: "Execution risk",
+    Assumption: "Untested assumption",
+  };
+  return (
+    <div className="risk-card">
+      <div className="risk-card-top">
+        <p className="risk-card-eyebrow">The real risk assessment</p>
+        <h2 className="risk-card-headline">{linkify(risk.headline)}</h2>
+      </div>
+
+      <div className="risk-list">
+        {risk.topRisks.map((r, i) => {
+          const sc = severityColors[r.severity] ?? severityColors.Medium;
+          return (
+            <div key={i} className="risk-row">
+              <div className="risk-row-top">
+                <div className="risk-row-heading">
+                  <span className="risk-category-tag">{categoryLabel[r.category] ?? r.category}</span>
+                  <h3 className="risk-row-title">{r.title}</h3>
+                </div>
+                <span className="severity-badge" style={{ background: sc.bg, color: sc.text, borderColor: sc.border }}>
+                  {r.severity}
+                </span>
+              </div>
+              <p className="risk-row-detail">{linkify(r.detail)}</p>
+              <div className="risk-row-test">
+                <span className="risk-row-test-label">Test this in days</span>
+                <span className="risk-row-test-text">{linkify(r.whatWouldProveThisWrong)}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {risk.hiddenAssumptions?.length > 0 && (
+        <div className="assumptions-block">
+          <p className="assumptions-title">Hidden assumptions this idea depends on</p>
+          <div className="assumptions-list">
+            {risk.hiddenAssumptions.map((a, i) => (
+              <div key={i} className="assumption-row">
+                <div className="assumption-marker" />
+                <div className="assumption-body">
+                  <p className="assumption-text">{linkify(a.assumption)}</p>
+                  <p className="assumption-if-wrong"><span>If wrong:</span> {linkify(a.ifWrong)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ScoreCard({ score }: { score: BlueprintScore }) {
   const colors: Record<Confidence, { bg: string; text: string; dot: string }> = {
     High:   { bg: "#dcfce7", text: "#166534", dot: "#16a34a" },
@@ -383,20 +487,21 @@ function ScoreCard({ score }: { score: BlueprintScore }) {
   };
   const c = colors[score.confidence] ?? colors.Medium;
   return (
-    <div className="score-card">
+    <div className="score-card score-card--secondary">
       <div className="score-left">
         <p className="score-label">Blueprint Score</p>
         <div className="score-number-row">
           <span className="score-number">{score.value}</span>
           <span className="score-denom">/10</span>
         </div>
+        <p className="score-caveat">A compressed signal, not a verdict — read the reasoning</p>
       </div>
       <div className="score-right">
         <div className="confidence-badge" style={{ background: c.bg, color: c.text }}>
           <span className="confidence-dot" style={{ background: c.dot }} />
           {score.confidence} Confidence
         </div>
-        <p className="score-reason">{score.reason}</p>
+        <p className="score-reason">{linkify(score.reason)}</p>
       </div>
     </div>
   );
@@ -424,7 +529,7 @@ function BuildEstimateCard({ estimate }: { estimate: BuildEstimate }) {
           </div>
         </div>
       </div>
-      <p className="build-summary">{estimate.summary}</p>
+      <p className="build-summary">{linkify(estimate.summary)}</p>
       <div className="build-breakdown">
         {estimate.breakdown.map((item, i) => {
           const c = complexityColors[item.complexity] ?? complexityColors.Medium;
@@ -437,7 +542,7 @@ function BuildEstimateCard({ estimate }: { estimate: BuildEstimate }) {
                   <span className="build-row-time">{item.soloTime}</span>
                 </div>
               </div>
-              <p className="build-row-note">{item.note}</p>
+              <p className="build-row-note">{linkify(item.note)}</p>
             </div>
           );
         })}
@@ -445,13 +550,13 @@ function BuildEstimateCard({ estimate }: { estimate: BuildEstimate }) {
       {estimate.hiddenComplexity && (
         <div className="build-warning">
           <p className="build-warning-label">Hidden complexity</p>
-          <p className="build-warning-text">{estimate.hiddenComplexity}</p>
+          <p className="build-warning-text">{linkify(estimate.hiddenComplexity)}</p>
         </div>
       )}
       {estimate.fastestPath && (
         <div className="build-fastpath">
           <p className="build-fastpath-label">Fastest path to signal</p>
-          <p className="build-fastpath-text">{estimate.fastestPath}</p>
+          <p className="build-fastpath-text">{linkify(estimate.fastestPath)}</p>
         </div>
       )}
       {estimate.recommendedStack?.length > 0 && (
@@ -479,11 +584,9 @@ function GtmCard({ gtm }: { gtm: GtmStrategy }) {
     Paid:        { bg: "#fef9c3", text: "#854d0e" },
     Partnership: { bg: "#f0fdf4", text: "#166534" },
   };
-
   return (
     <div className="gtm-card">
       <p className="gtm-card-label">Go-To-Market Strategy</p>
-
       <div className="gtm-section">
         <p className="gtm-section-title">Pricing</p>
         <div className="gtm-pricing-box">
@@ -491,18 +594,16 @@ function GtmCard({ gtm }: { gtm: GtmStrategy }) {
             <span className="gtm-pricing-value">{gtm.pricingModel.recommendation}</span>
             <span className="gtm-pricing-model">{gtm.pricingModel.model}</span>
           </div>
-          <p className="gtm-pricing-reason">{gtm.pricingModel.reasoning}</p>
+          <p className="gtm-pricing-reason">{linkify(gtm.pricingModel.reasoning)}</p>
         </div>
       </div>
-
       <div className="gtm-section">
         <p className="gtm-section-title">Fastest path to first paying customer</p>
         <div className="gtm-fastest-box">
           <p className="gtm-fastest-channel">{gtm.fastestChannel.channel}</p>
-          <p className="gtm-fastest-why">{gtm.fastestChannel.why}</p>
+          <p className="gtm-fastest-why">{linkify(gtm.fastestChannel.why)}</p>
         </div>
       </div>
-
       <div className="gtm-section">
         <p className="gtm-section-title">First 100 users — step by step</p>
         <div className="gtm-playbook">
@@ -510,31 +611,18 @@ function GtmCard({ gtm }: { gtm: GtmStrategy }) {
             <div key={step.step} className="gtm-step">
               <div className="gtm-step-header">
                 <span className="gtm-step-num">Step {step.step}</span>
-                <span className="gtm-step-action">{step.action}</span>
+                <span className="gtm-step-action">{linkify(step.action)}</span>
               </div>
               <div className="gtm-step-grid">
-                <div className="gtm-step-item">
-                  <span className="gtm-step-item-label">Who</span>
-                  <span className="gtm-step-item-value">{step.who}</span>
-                </div>
-                <div className="gtm-step-item">
-                  <span className="gtm-step-item-label">Where</span>
-                  <span className="gtm-step-item-value">{step.where}</span>
-                </div>
-                <div className="gtm-step-item">
-                  <span className="gtm-step-item-label">What to say</span>
-                  <span className="gtm-step-item-value">{step.what}</span>
-                </div>
-                <div className="gtm-step-item">
-                  <span className="gtm-step-item-label">Signal</span>
-                  <span className="gtm-step-item-value gtm-step-signal">{step.signal}</span>
-                </div>
+                <div className="gtm-step-item"><span className="gtm-step-item-label">Who</span><span className="gtm-step-item-value">{linkify(step.who)}</span></div>
+                <div className="gtm-step-item"><span className="gtm-step-item-label">Where</span><span className="gtm-step-item-value">{linkify(step.where)}</span></div>
+                <div className="gtm-step-item"><span className="gtm-step-item-label">What to say</span><span className="gtm-step-item-value">{linkify(step.what)}</span></div>
+                <div className="gtm-step-item"><span className="gtm-step-item-label">Signal</span><span className="gtm-step-item-value gtm-step-signal">{linkify(step.signal)}</span></div>
               </div>
             </div>
           ))}
         </div>
       </div>
-
       <div className="gtm-section">
         <p className="gtm-section-title">Channels</p>
         <div className="gtm-channels">
@@ -551,13 +639,12 @@ function GtmCard({ gtm }: { gtm: GtmStrategy }) {
                     <span className="gtm-channel-time">{ch.timeToFirstResult}</span>
                   </div>
                 </div>
-                <p className="gtm-channel-desc">{ch.description}</p>
+                <p className="gtm-channel-desc">{linkify(ch.description)}</p>
               </div>
             );
           })}
         </div>
       </div>
-
       <div className="gtm-section">
         <p className="gtm-section-title">North star metric</p>
         <div className="gtm-metric-box">
@@ -565,18 +652,55 @@ function GtmCard({ gtm }: { gtm: GtmStrategy }) {
             <span className="gtm-metric-name">{gtm.northStarMetric.metric}</span>
             <span className="gtm-metric-target">{gtm.northStarMetric.target}</span>
           </div>
-          <p className="gtm-metric-why">{gtm.northStarMetric.why}</p>
+          <p className="gtm-metric-why">{linkify(gtm.northStarMetric.why)}</p>
         </div>
       </div>
-
       {gtm.gtmRisks?.length > 0 && (
         <div className="gtm-section">
           <p className="gtm-section-title">GTM risks</p>
-          <ul className="gtm-risks">
-            {gtm.gtmRisks.map((r, i) => <li key={i}>{r}</li>)}
-          </ul>
+          <ul className="gtm-risks">{gtm.gtmRisks.map((r, i) => <li key={i}>{linkify(r)}</li>)}</ul>
         </div>
       )}
+    </div>
+  );
+}
+
+function ResearchSourcesCard({ sources }: { sources: ResearchSource[] }) {
+  const byCategory: Record<string, ResearchSource[]> = {
+    "Competitor": sources.filter(s => s.category === "Competitor"),
+    "Market size": sources.filter(s => s.category === "Market size"),
+    "Reddit": sources.filter(s => s.category === "Reddit"),
+    "Past failure": sources.filter(s => s.category === "Past failure"),
+  };
+  const meta: Record<string, string> = {
+    "Competitor": "Competitors found",
+    "Market size": "Market size data",
+    "Reddit": "Reddit threads",
+    "Past failure": "Past failures",
+  };
+  if (!sources.length) return null;
+  return (
+    <div className="research-card">
+      <p className="research-label">Research Sources</p>
+      <p className="research-sub">
+        Competitor analysis and market data grounded in live web research — not training knowledge.
+      </p>
+      {Object.entries(byCategory).map(([cat, items]) => {
+        if (!items.length) return null;
+        return (
+          <div key={cat} className="research-section">
+            <p className="research-section-title">{meta[cat]}</p>
+            {items.map((s, i) => (
+              <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" className="research-source-row">
+                <span className="research-source-title">{s.title}</span>
+                <span className="research-source-url">
+                  {(() => { try { return new URL(s.url).hostname; } catch { return s.url; } })()}
+                </span>
+              </a>
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -603,57 +727,50 @@ function SectionCard({ section, delay }: { section: BlueprintSection; delay: num
 async function generatePDF(blueprint: Blueprint) {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-
-  const pageWidth = 210;
-  const margin = 20;
-  const contentWidth = pageWidth - margin * 2;
+  const pageWidth = 210, margin = 20, contentWidth = pageWidth - margin * 2;
   let y = 0;
 
-  function checkPageBreak(needed: number) {
-    if (y + needed > 272) { doc.addPage(); y = 20; }
-  }
-
-  function addText(text: string, fontSize: number, color: [number, number, number], bold = false, xOffset = 0) {
-    doc.setFontSize(fontSize);
-    doc.setTextColor(...color);
-    doc.setFont("helvetica", bold ? "bold" : "normal");
+  function checkPageBreak(needed: number) { if (y + needed > 272) { doc.addPage(); y = 20; } }
+  function addText(text: string, fontSize: number, color: [number,number,number], bold = false, xOffset = 0) {
+    doc.setFontSize(fontSize); doc.setTextColor(...color); doc.setFont("helvetica", bold ? "bold" : "normal");
     const lines = doc.splitTextToSize(text, contentWidth - xOffset);
     const lineH = fontSize * 0.45;
     checkPageBreak(lines.length * lineH + 2);
-    doc.text(lines, margin + xOffset, y);
-    y += lines.length * lineH + 2;
+    doc.text(lines, margin + xOffset, y); y += lines.length * lineH + 2;
   }
 
-  doc.setFillColor(17, 17, 17);
-  doc.rect(0, 0, 210, 30, "F");
-  doc.setFontSize(20); doc.setTextColor(255,255,255); doc.setFont("helvetica","bold");
-  doc.text("Blueprint AI", margin, 17);
+  doc.setFillColor(17,17,17); doc.rect(0,0,210,30,"F");
+  doc.setFontSize(20); doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.text("Blueprint AI", margin, 17);
   doc.setFontSize(9); doc.setFont("helvetica","normal"); doc.setTextColor(180,180,180);
   doc.text("AI-generated startup blueprint  ·  blueprintai.com", margin, 24);
   y = 40;
 
+  if (blueprint.riskProfile) {
+    const rp = blueprint.riskProfile;
+    doc.setFillColor(255,248,248); doc.roundedRect(margin,y,contentWidth,20,3,3,"F");
+    doc.setFillColor(220,38,38); doc.roundedRect(margin,y,3,20,1,1,"F");
+    doc.setFontSize(8); doc.setTextColor(153,27,27); doc.setFont("helvetica","bold");
+    doc.text("THE REAL RISK", margin+8, y+8);
+    doc.setFontSize(9.5); doc.setTextColor(60,60,60); doc.setFont("helvetica","normal");
+    const hl = doc.splitTextToSize(rp.headline, contentWidth-16); doc.text(hl, margin+8, y+15);
+    y += 26;
+  }
+
   const scoreRGB: [number,number,number] = blueprint.score.confidence === "High" ? [22,101,52] : blueprint.score.confidence === "Low" ? [153,27,27] : [133,77,14];
   const scoreBgRGB: [number,number,number] = blueprint.score.confidence === "High" ? [240,253,244] : blueprint.score.confidence === "Low" ? [254,242,242] : [254,252,232];
-  doc.setFillColor(...scoreBgRGB);
-  doc.roundedRect(margin, y, contentWidth, 34, 3, 3, "F");
-  doc.setFillColor(...scoreRGB);
-  doc.roundedRect(margin, y, 3, 34, 1, 1, "F");
-  doc.setFontSize(30); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold");
-  doc.text(`${blueprint.score.value}`, margin + 8, y + 20);
-  doc.setFontSize(14); doc.setTextColor(150,150,150);
-  doc.text("/10", margin + 22, y + 20);
-  doc.setFontSize(10); doc.setTextColor(...scoreRGB); doc.setFont("helvetica","bold");
-  doc.text(`${blueprint.score.confidence} Confidence`, margin + 42, y + 10);
+  doc.setFillColor(...scoreBgRGB); doc.roundedRect(margin,y,contentWidth,34,3,3,"F");
+  doc.setFillColor(...scoreRGB); doc.roundedRect(margin,y,3,34,1,1,"F");
+  doc.setFontSize(30); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold"); doc.text(`${blueprint.score.value}`, margin+8, y+20);
+  doc.setFontSize(14); doc.setTextColor(150,150,150); doc.text("/10", margin+22, y+20);
+  doc.setFontSize(10); doc.setTextColor(...scoreRGB); doc.setFont("helvetica","bold"); doc.text(`${blueprint.score.confidence} Confidence`, margin+42, y+10);
   doc.setFontSize(8.5); doc.setTextColor(80,80,80); doc.setFont("helvetica","normal");
-  const reasonLines = doc.splitTextToSize(blueprint.score.reason, contentWidth - 44);
-  doc.text(reasonLines, margin + 42, y + 17);
+  const reasonLines = doc.splitTextToSize(blueprint.score.reason, contentWidth-44); doc.text(reasonLines, margin+42, y+17);
   y += 42;
 
   if (blueprint.buildEstimate) {
     const be = blueprint.buildEstimate;
     checkPageBreak(20);
-    doc.setFontSize(11); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold");
-    doc.text("Build Time Estimate", margin, y); y += 6;
+    doc.setFontSize(11); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold"); doc.text("Build Time Estimate", margin, y); y += 6;
     doc.setFontSize(9); doc.setTextColor(80,80,80); doc.setFont("helvetica","normal");
     doc.text(`Solo: ${be.soloTimeline}    |    2 devs: ${be.teamTimeline}`, margin, y); y += 6;
     addText(be.summary, 9, [85,85,85]);
@@ -662,137 +779,91 @@ async function generatePDF(blueprint: Blueprint) {
       doc.setFontSize(9); doc.setTextColor(34,34,34); doc.setFont("helvetica","bold");
       doc.text(`${item.feature} — ${item.soloTime} (${item.complexity})`, margin, y); y += 4.5;
       doc.setFont("helvetica","normal"); doc.setTextColor(120,120,120);
-      const nl = doc.splitTextToSize(item.note, contentWidth);
-      doc.text(nl, margin, y); y += nl.length * 4 + 3;
+      const nl = doc.splitTextToSize(item.note, contentWidth); doc.text(nl, margin, y); y += nl.length * 4 + 3;
     }
-    if (be.hiddenComplexity) {
-      checkPageBreak(12);
-      doc.setFontSize(9); doc.setTextColor(220,38,38); doc.setFont("helvetica","bold");
-      doc.text("Hidden complexity:", margin, y); y += 4.5;
-      addText(be.hiddenComplexity, 9, [85,85,85]);
-    }
-    if (be.fastestPath) {
-      checkPageBreak(12);
-      doc.setFontSize(9); doc.setTextColor(22,163,74); doc.setFont("helvetica","bold");
-      doc.text("Fastest path to signal:", margin, y); y += 4.5;
-      addText(be.fastestPath, 9, [85,85,85]);
-    }
-    if (be.recommendedStack?.length) {
-      checkPageBreak(10);
-      doc.setFontSize(9); doc.setTextColor(120,120,120); doc.setFont("helvetica","normal");
-      doc.text(`Stack: ${be.recommendedStack.join(", ")}`, margin, y); y += 6;
-    }
-    y += 6;
-    doc.setDrawColor(230,230,228); doc.line(margin, y, margin + contentWidth, y); y += 8;
+    if (be.hiddenComplexity) { checkPageBreak(12); doc.setFontSize(9); doc.setTextColor(220,38,38); doc.setFont("helvetica","bold"); doc.text("Hidden complexity:", margin, y); y += 4.5; addText(be.hiddenComplexity, 9, [85,85,85]); }
+    if (be.fastestPath) { checkPageBreak(12); doc.setFontSize(9); doc.setTextColor(22,163,74); doc.setFont("helvetica","bold"); doc.text("Fastest path to signal:", margin, y); y += 4.5; addText(be.fastestPath, 9, [85,85,85]); }
+    if (be.recommendedStack?.length) { checkPageBreak(10); doc.setFontSize(9); doc.setTextColor(120,120,120); doc.setFont("helvetica","normal"); doc.text(`Stack: ${be.recommendedStack.join(", ")}`, margin, y); y += 6; }
+    y += 6; doc.setDrawColor(230,230,228); doc.line(margin,y,margin+contentWidth,y); y += 8;
   }
 
   if (blueprint.gtmStrategy) {
     const gtm = blueprint.gtmStrategy;
     checkPageBreak(20);
-    doc.setFontSize(11); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold");
-    doc.text("Go-To-Market Strategy", margin, y); y += 8;
+    doc.setFontSize(11); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold"); doc.text("Go-To-Market Strategy", margin, y); y += 8;
     doc.setFontSize(9); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold");
     doc.text(`Pricing: ${gtm.pricingModel.recommendation} — ${gtm.pricingModel.model}`, margin, y); y += 5;
-    addText(gtm.pricingModel.reasoning, 9, [85,85,85]);
-    y += 2;
+    addText(gtm.pricingModel.reasoning, 9, [85,85,85]); y += 2;
     doc.setFontSize(9); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold");
     doc.text(`Fastest channel: ${gtm.fastestChannel.channel}`, margin, y); y += 5;
-    addText(gtm.fastestChannel.why, 9, [85,85,85]);
-    y += 2;
-    doc.setFontSize(9); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold");
-    doc.text("First 100 Users Playbook", margin, y); y += 5;
+    addText(gtm.fastestChannel.why, 9, [85,85,85]); y += 2;
+    doc.setFontSize(9); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold"); doc.text("First 100 Users Playbook", margin, y); y += 5;
     for (const step of gtm.first100Playbook) {
       checkPageBreak(20);
       doc.setFontSize(8.5); doc.setTextColor(34,34,34); doc.setFont("helvetica","bold");
       doc.text(`Step ${step.step}: ${step.action}`, margin, y); y += 4.5;
       doc.setFont("helvetica","normal"); doc.setTextColor(100,100,100);
-      const stepLines = doc.splitTextToSize(`Who: ${step.who} | Where: ${step.where}`, contentWidth - 4);
-      doc.text(stepLines, margin + 4, y); y += stepLines.length * 3.8 + 1;
-      const whatLines = doc.splitTextToSize(`What: ${step.what}`, contentWidth - 4);
-      doc.text(whatLines, margin + 4, y); y += whatLines.length * 3.8 + 1;
-      const sigLines = doc.splitTextToSize(`Signal: ${step.signal}`, contentWidth - 4);
-      doc.text(sigLines, margin + 4, y); y += sigLines.length * 3.8 + 3;
+      const l1 = doc.splitTextToSize(`Who: ${step.who} | Where: ${step.where}`, contentWidth-4); doc.text(l1, margin+4, y); y += l1.length*3.8+1;
+      const l2 = doc.splitTextToSize(`What: ${step.what}`, contentWidth-4); doc.text(l2, margin+4, y); y += l2.length*3.8+1;
+      const l3 = doc.splitTextToSize(`Signal: ${step.signal}`, contentWidth-4); doc.text(l3, margin+4, y); y += l3.length*3.8+3;
     }
     y += 2;
-    doc.setFontSize(9); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold");
-    doc.text("Channels", margin, y); y += 5;
+    doc.setFontSize(9); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold"); doc.text("Channels", margin, y); y += 5;
     for (const ch of gtm.channels) {
       checkPageBreak(14);
       doc.setFontSize(8.5); doc.setTextColor(34,34,34); doc.setFont("helvetica","bold");
       doc.text(`${ch.name} (${ch.type} · ${ch.effort} effort · ${ch.timeToFirstResult})`, margin, y); y += 4.5;
       doc.setFont("helvetica","normal"); doc.setTextColor(100,100,100);
-      const chLines = doc.splitTextToSize(ch.description, contentWidth - 4);
-      doc.text(chLines, margin + 4, y); y += chLines.length * 3.8 + 3;
+      const cl = doc.splitTextToSize(ch.description, contentWidth-4); doc.text(cl, margin+4, y); y += cl.length*3.8+3;
     }
     y += 2;
     doc.setFontSize(9); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold");
     doc.text(`North Star: ${gtm.northStarMetric.metric} — ${gtm.northStarMetric.target}`, margin, y); y += 5;
-    addText(gtm.northStarMetric.why, 9, [85,85,85]);
-    y += 2;
+    addText(gtm.northStarMetric.why, 9, [85,85,85]); y += 2;
     if (gtm.gtmRisks?.length) {
-      doc.setFontSize(9); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold");
-      doc.text("GTM Risks", margin, y); y += 5;
+      doc.setFontSize(9); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold"); doc.text("GTM Risks", margin, y); y += 5;
       for (const risk of gtm.gtmRisks) {
-        checkPageBreak(8);
-        doc.setFontSize(8.5); doc.setTextColor(68,68,68); doc.setFont("helvetica","normal");
-        doc.text("•", margin + 2, y);
-        const rl = doc.splitTextToSize(risk, contentWidth - 8);
-        doc.text(rl, margin + 7, y); y += rl.length * 4 + 2;
+        checkPageBreak(8); doc.setFontSize(8.5); doc.setTextColor(68,68,68); doc.setFont("helvetica","normal");
+        doc.text("•", margin+2, y);
+        const rl = doc.splitTextToSize(risk, contentWidth-8); doc.text(rl, margin+7, y); y += rl.length*4+2;
       }
     }
-    y += 6;
-    doc.setDrawColor(230,230,228); doc.line(margin, y, margin + contentWidth, y); y += 8;
+    y += 6; doc.setDrawColor(230,230,228); doc.line(margin,y,margin+contentWidth,y); y += 8;
   }
 
   for (const section of blueprint.sections) {
     checkPageBreak(24);
-    doc.setFillColor(17,17,17);
-    doc.roundedRect(margin, y, 18, 7, 2, 2, "F");
-    doc.setFontSize(7); doc.setTextColor(255,255,255); doc.setFont("helvetica","bold");
-    doc.text(`  ${section.number}`, margin + 1, y + 5);
+    doc.setFillColor(17,17,17); doc.roundedRect(margin,y,18,7,2,2,"F");
+    doc.setFontSize(7); doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.text(`  ${section.number}`, margin+1, y+5);
     doc.setFontSize(12); doc.setTextColor(17,17,17); doc.setFont("helvetica","bold");
-    const titleLines = doc.splitTextToSize(section.title, contentWidth - 24);
-    doc.text(titleLines, margin + 22, y + 5.5);
-    y += 12;
-    doc.setDrawColor(230,230,228); doc.line(margin, y, margin + contentWidth, y); y += 5;
-    const contentLines = section.content.split("\n").filter(Boolean);
-    const isList = contentLines.length > 1 && contentLines.every(l => /^[-•*\d]/.test(l.trim()));
+    const tl = doc.splitTextToSize(section.title, contentWidth-24); doc.text(tl, margin+22, y+5.5); y += 12;
+    doc.setDrawColor(230,230,228); doc.line(margin,y,margin+contentWidth,y); y += 5;
+    const cl = section.content.split("\n").filter(Boolean);
+    const isList = cl.length > 1 && cl.every(l => /^[-•*\d]/.test(l.trim()));
     if (isList) {
-      for (const line of contentLines) {
-        checkPageBreak(8);
-        doc.setFontSize(8.5); doc.setTextColor(68,68,68); doc.setFont("helvetica","normal");
-        doc.text("•", margin + 2, y);
-        const wrapped = doc.splitTextToSize(line.replace(/^[-•*\d.]\s*/,""), contentWidth - 8);
-        doc.text(wrapped, margin + 7, y); y += wrapped.length * 4.2 + 1.5;
+      for (const line of cl) {
+        checkPageBreak(8); doc.setFontSize(8.5); doc.setTextColor(68,68,68); doc.setFont("helvetica","normal");
+        doc.text("•", margin+2, y);
+        const w = doc.splitTextToSize(line.replace(/^[-•*\d.]\s*/,""), contentWidth-8); doc.text(w, margin+7, y); y += w.length*4.2+1.5;
       }
-    } else {
-      addText(section.content, 9, [68,68,68]);
-    }
+    } else { addText(section.content, 9, [68,68,68]); }
     y += 8;
   }
 
   const total = doc.getNumberOfPages();
   for (let i = 1; i <= total; i++) {
-    doc.setPage(i);
-    doc.setFillColor(245,245,243); doc.rect(0,284,210,13,"F");
+    doc.setPage(i); doc.setFillColor(245,245,243); doc.rect(0,284,210,13,"F");
     doc.setFontSize(7.5); doc.setTextColor(160,160,160); doc.setFont("helvetica","normal");
     doc.text("Generated by Blueprint AI · Not financial or legal advice", margin, 291);
-    doc.text(`Page ${i} of ${total}`, pageWidth - margin, 291, { align: "right" });
+    doc.text(`Page ${i} of ${total}`, pageWidth-margin, 291, { align: "right" });
   }
-
   doc.save("blueprint.pdf");
 }
 
-// ─── BUILD THIS FOR ME MODAL ──────────────────────────────────────────────────
-// Only ever opened for signed-in users now (gated upstream), so there is no
-// guest-email path here anymore — it always has a real email/image to send.
 type BuildModalStep = "pricing" | "yes_maybe" | "no_feedback" | "done";
 
 function BuildThisModal({
-  blueprintId,
-  userEmail,
-  userImageUrl,
-  onClose,
+  blueprintId, userEmail, userImageUrl, onClose,
 }: {
   blueprintId: string | null;
   userEmail: string | null;
@@ -805,39 +876,24 @@ function BuildThisModal({
   const [error, setError] = useState("");
 
   async function save(response: "yes" | "maybe" | "no", fb?: string) {
-    setSaving(true);
-    setError("");
+    setSaving(true); setError("");
     try {
       const res = await fetch("/api/build-interest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          blueprint_id: blueprintId,
-          response,
-          feedback: fb ?? null,
-          email: userEmail,
-          image_url: userImageUrl,
-        }),
+        body: JSON.stringify({ blueprint_id: blueprintId, response, feedback: fb ?? null, email: userEmail, image_url: userImageUrl }),
       });
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.error ?? "Something went wrong");
-      }
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error ?? "Something went wrong"); }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to save");
-      setSaving(false);
-      return false;
+      setSaving(false); return false;
     }
-    setSaving(false);
-    return true;
+    setSaving(false); return true;
   }
 
   function handleResponse(r: "yes" | "maybe" | "no") {
-    if (r === "no") {
-      setStep("no_feedback");
-    } else {
-      save(r).then((ok) => { if (ok) setStep("yes_maybe"); });
-    }
+    if (r === "no") { setStep("no_feedback"); }
+    else { save(r).then((ok) => { if (ok) setStep("yes_maybe"); }); }
   }
 
   async function submitFeedback() {
@@ -849,15 +905,11 @@ function BuildThisModal({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box build-modal-box" onClick={(e) => e.stopPropagation()}>
         <button className="build-modal-close" onClick={onClose} aria-label="Close">×</button>
-
-        {/* ── Pricing step ── */}
         {step === "pricing" && (
           <>
             <p className="build-modal-eyebrow">Early access</p>
             <h2 className="build-modal-title">Get this built for you</h2>
-            <p className="build-modal-sub">
-              We'll turn your blueprint into a working MVP — code files, GitHub repo, and deployment guide.
-            </p>
+            <p className="build-modal-sub">We'll turn your blueprint into a working MVP — code files, GitHub repo, and deployment guide.</p>
             <div className="build-modal-price-card">
               <div className="build-modal-price-row">
                 <span className="build-modal-price">₹20</span>
@@ -878,43 +930,24 @@ function BuildThisModal({
             {error && <p className="build-modal-error">{error}</p>}
           </>
         )}
-
-        {/* ── Yes / Maybe confirmed ── */}
         {step === "yes_maybe" && (
           <div className="build-modal-confirm">
             <h2 className="build-modal-title">You're on the list</h2>
-            <p className="build-modal-sub">
-              We're launching this in the next few days. You'll be the first to know — we'll reach out on your registered email, the moment it's live.
-            </p>
+            <p className="build-modal-sub">We're launching this in the next few days. You'll be the first to know — we'll reach out on your registered email, the moment it's live.</p>
             <button className="build-modal-link-btn" onClick={onClose}>Back to blueprint</button>
           </div>
         )}
-
-        {/* ── No → feedback ── */}
         {step === "no_feedback" && (
           <>
             <h2 className="build-modal-title">Got it — what would you need instead?</h2>
             <p className="build-modal-sub">Your feedback helps us build something actually useful.</p>
-            <textarea
-              rows={4}
-              placeholder="e.g. I'd want it cheaper, or I'd prefer to build it myself with more guidance…"
-              value={feedback}
-              onChange={(e) => setFeedback(e.target.value)}
-              className="build-modal-textarea"
-            />
-            <button
-              className="build-btn-yes"
-              style={{ width: "100%" }}
-              onClick={submitFeedback}
-              disabled={saving || !feedback.trim()}
-            >
+            <textarea rows={4} placeholder="e.g. I'd want it cheaper, or I'd prefer to build it myself with more guidance…" value={feedback} onChange={(e) => setFeedback(e.target.value)} className="build-modal-textarea" />
+            <button className="build-btn-yes" style={{ width: "100%" }} onClick={submitFeedback} disabled={saving || !feedback.trim()}>
               {saving ? "Saving…" : "Send feedback"}
             </button>
             {error && <p className="build-modal-error">{error}</p>}
           </>
         )}
-
-        {/* ── Done (after no + feedback) ── */}
         {step === "done" && (
           <div className="build-modal-confirm">
             <h2 className="build-modal-title">Thanks for the feedback</h2>
@@ -927,14 +960,13 @@ function BuildThisModal({
   );
 }
 
-// ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 export default function BlueprintPage() {
   const [loading, setLoading]               = useState(true);
   const [stage, setStage]                   = useState<Stage>("thinking");
   const [blueprint, setBlueprint]           = useState<Blueprint | null>(null);
   const [partialScore, setPartialScore]     = useState<BlueprintScore | null>(null);
   const [streamProgress, setStreamProgress] = useState<StreamProgress>({
-    hasScore: false, hasBuildEstimate: false, hasGtmStrategy: false, sectionsSeen: 0,
+    hasScore: false, hasResearch: false, hasBuildEstimate: false, hasGtmStrategy: false, sectionsSeen: 0,
   });
   const [saved, setSaved]                   = useState(false);
   const [blueprintId, setBlueprintId]       = useState<string | null>(null);
@@ -944,9 +976,6 @@ export default function BlueprintPage() {
   const { isSignedIn, isLoaded }            = useAuth();
   const { user }                            = useUser();
 
-  // Pulled once Clerk has loaded the signed-in user; used for the Build
-  // modal and sent straight to /api/build-interest so we never have to
-  // ask a signed-in person to type their own email.
   const userEmail    = user?.primaryEmailAddress?.emailAddress ?? null;
   const userImageUrl = user?.imageUrl ?? null;
 
@@ -966,7 +995,6 @@ export default function BlueprintPage() {
       if (res.ok) {
         const data = await res.json();
         setSaved(true);
-        // capture the id so the Build modal can reference this blueprint
         if (data.id) setBlueprintId(data.id);
       }
     } catch { /* silent */ }
@@ -1055,13 +1083,9 @@ export default function BlueprintPage() {
     }
     if (blueprint.gtmStrategy) {
       const gtm = blueprint.gtmStrategy;
-      text += `GO-TO-MARKET STRATEGY\n`;
-      text += `Pricing: ${gtm.pricingModel.recommendation} — ${gtm.pricingModel.model}\n${gtm.pricingModel.reasoning}\n`;
-      text += `Fastest channel: ${gtm.fastestChannel.channel}\n${gtm.fastestChannel.why}\n`;
-      text += `\nFirst 100 Users:\n`;
-      gtm.first100Playbook.forEach(s => {
-        text += `Step ${s.step}: ${s.action}\n  Who: ${s.who}\n  Where: ${s.where}\n  What: ${s.what}\n  Signal: ${s.signal}\n`;
-      });
+      text += `GO-TO-MARKET STRATEGY\nPricing: ${gtm.pricingModel.recommendation} — ${gtm.pricingModel.model}\n${gtm.pricingModel.reasoning}\n`;
+      text += `Fastest channel: ${gtm.fastestChannel.channel}\n${gtm.fastestChannel.why}\n\nFirst 100 Users:\n`;
+      gtm.first100Playbook.forEach(s => { text += `Step ${s.step}: ${s.action}\n  Who: ${s.who}\n  Where: ${s.where}\n  What: ${s.what}\n  Signal: ${s.signal}\n`; });
       text += `\nNorth Star: ${gtm.northStarMetric.metric} — ${gtm.northStarMetric.target}\n${gtm.northStarMetric.why}\n\n`;
     }
     text += blueprint.sections.map((s) => `${s.number}. ${s.title}\n${s.content}`).join("\n\n");
@@ -1075,24 +1099,13 @@ export default function BlueprintPage() {
 
   async function handleDownloadPDF() {
     if (!blueprint || pdfLoading) return;
-    // Require sign-in before downloading — guests get sent to sign in,
-    // then back to this same blueprint via the redirect_url param.
-    if (!isSignedIn) {
-      window.location.href = "/sign-in?redirect_url=/blueprint";
-      return;
-    }
+    if (!isSignedIn) { window.location.href = "/sign-in?redirect_url=/blueprint"; return; }
     setPdfLoading(true);
-    try { await generatePDF(blueprint); }
-    finally { setPdfLoading(false); }
+    try { await generatePDF(blueprint); } finally { setPdfLoading(false); }
   }
 
   function handleBuildThisForMe() {
-    // Require sign-in before opening the Build modal at all — no guest
-    // email path anymore, just a straight redirect like Save/PDF.
-    if (!isSignedIn) {
-      window.location.href = "/sign-in?redirect_url=/blueprint";
-      return;
-    }
+    if (!isSignedIn) { window.location.href = "/sign-in?redirect_url=/blueprint"; return; }
     setShowBuildModal(true);
   }
 
@@ -1101,7 +1114,6 @@ export default function BlueprintPage() {
 
   return (
     <main className="bp-root">
-      {/* ── Hero / header ── */}
       <div className="bp-hero">
         <div className="bp-hero-inner">
           <div className="status-badge">
@@ -1109,7 +1121,7 @@ export default function BlueprintPage() {
             {saved ? "Blueprint saved to your dashboard" : "AI-generated startup blueprint"}
           </div>
           <h1 className="bp-hero-title">Your product blueprint</h1>
-          <p className="bp-hero-sub">Score · Build estimate · GTM strategy · 12-section analysis</p>
+          <p className="bp-hero-sub">Risks & hidden assumptions · Score · Build estimate · GTM strategy</p>
           <div className="bp-hero-actions">
             <button className="action-btn" onClick={handleCopy}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
@@ -1142,61 +1154,46 @@ export default function BlueprintPage() {
       <div className="bp-meta-bar">
         <span className="meta-pill">{blueprint.sections.length} sections</span>
         <div className="meta-divider" />
-        <span className="meta-text">Score · Build Estimate · GTM · ICP · MVP · Risks · 30-Day Plan</span>
+        <span className="meta-text">Risks · Assumptions · Score · Build Estimate · GTM · ICP · MVP · 30-Day Plan</span>
       </div>
 
-      {/* ── Score + special cards ── */}
       <div className="bp-score-wrap">
+        {blueprint.riskProfile && <RiskProfileCard risk={blueprint.riskProfile} />}
         <ScoreCard score={blueprint.score} />
         {blueprint.buildEstimate && <BuildEstimateCard estimate={blueprint.buildEstimate} />}
         {blueprint.gtmStrategy && <GtmCard gtm={blueprint.gtmStrategy} />}
+        {blueprint.researchSources && blueprint.researchSources.length > 0 && (
+          <ResearchSourcesCard sources={blueprint.researchSources} />
+        )}
       </div>
 
-      {/* ── Sections ── */}
       <div className="bp-sections">
         {blueprint.sections.map((section, i) => (
           <SectionCard key={section.number} section={section} delay={i * 60} />
         ))}
       </div>
 
-      {/* ────────────────────────────────────────────────────────────────────
-          BUILD THIS FOR ME — separate section below all blueprint content
-      ──────────────────────────────────────────────────────────────────── */}
       <div className="build-this-section">
         <div className="build-this-inner">
           <div className="build-this-text">
             <p className="build-this-eyebrow">Skip the build</p>
             <h2 className="build-this-title">Want this built for you?</h2>
-            <p className="build-this-sub">
-              We can turn this blueprint into a working MVP — code, repo, and deployment guide —
-              so you can launch without writing a line.
-            </p>
+            <p className="build-this-sub">We can turn this blueprint into a working MVP — code, repo, and deployment guide — so you can launch without writing a line.</p>
           </div>
-          <button
-            className="build-this-btn"
-            disabled={!!isSignedIn && !saved}
-            onClick={handleBuildThisForMe}
-          >
+          <button className="build-this-btn" disabled={!!isSignedIn && !saved} onClick={handleBuildThisForMe}>
             {isSignedIn && !saved ? "Preparing…" : "Build this for me"}
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </button>
         </div>
       </div>
-      {/* ───────────────────────────────────────────────────────────────── */}
 
       <div className="bp-footer">
         <p>Generated by Blueprint AI · Not financial or legal advice</p>
         <a href="/interview">Start a new blueprint →</a>
       </div>
 
-      {/* Build-this-for-me modal — only ever reached by signed-in users */}
       {showBuildModal && (
-        <BuildThisModal
-          blueprintId={blueprintId}
-          userEmail={userEmail}
-          userImageUrl={userImageUrl}
-          onClose={() => setShowBuildModal(false)}
-        />
+        <BuildThisModal blueprintId={blueprintId} userEmail={userEmail} userImageUrl={userImageUrl} onClose={() => setShowBuildModal(false)} />
       )}
 
       <style>{`
@@ -1220,12 +1217,41 @@ export default function BlueprintPage() {
         .meta-divider { width:1px; height:14px; background:#ddd; }
         .meta-text { font-size:12px; color:#aaa; }
         .bp-score-wrap { max-width:720px; margin:16px auto 0; padding:0 24px; display:flex; flex-direction:column; gap:12px; }
+
+        .risk-card { background:#18120f; border:1px solid #2c2420; border-radius:18px; padding:28px 28px 24px; color:#f5f0ec; }
+        .risk-card-top { margin-bottom:20px; }
+        .risk-card-eyebrow { font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:#f87171; margin-bottom:10px; }
+        .risk-card-headline { font-family:'Instrument Serif',serif; font-size:24px; font-weight:400; line-height:1.35; color:#fff; }
+        .risk-list { display:flex; flex-direction:column; gap:12px; margin-bottom:20px; }
+        .risk-row { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:16px 18px; }
+        .risk-row-top { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:8px; }
+        .risk-row-heading { display:flex; flex-direction:column; gap:4px; }
+        .risk-category-tag { font-size:10.5px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; color:#c7bfb8; }
+        .risk-row-title { font-size:15.5px; font-weight:600; color:#fff; }
+        .severity-badge { font-size:10.5px; font-weight:700; border-radius:99px; padding:3px 10px; border:1px solid; flex-shrink:0; white-space:nowrap; }
+        .risk-row-detail { font-size:13.5px; color:#d8d0c9; line-height:1.65; margin-bottom:12px; }
+        .risk-row-test { display:flex; flex-direction:column; gap:2px; background:rgba(255,255,255,0.05); border-radius:8px; padding:10px 12px; }
+        .risk-row-test-label { font-size:10px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:#86efac; }
+        .risk-row-test-text { font-size:12.5px; color:#e5e0da; line-height:1.5; }
+        .assumptions-block { padding-top:18px; border-top:1px solid rgba(255,255,255,0.1); }
+        .assumptions-title { font-size:12px; font-weight:600; letter-spacing:0.03em; color:#c7bfb8; margin-bottom:12px; }
+        .assumptions-list { display:flex; flex-direction:column; gap:10px; }
+        .assumption-row { display:flex; gap:10px; align-items:flex-start; }
+        .assumption-marker { width:6px; height:6px; border-radius:50%; background:#f59e0b; margin-top:6px; flex-shrink:0; }
+        .assumption-body { flex:1; }
+        .assumption-text { font-size:13.5px; color:#f0e9e2; line-height:1.6; margin-bottom:3px; }
+        .assumption-if-wrong { font-size:12.5px; color:#a89f96; line-height:1.55; }
+        .assumption-if-wrong span { font-weight:600; color:#c7bfb8; }
+
         .score-card { background:#fff; border:1px solid #e8e8e5; border-radius:16px; padding:24px 28px; display:flex; gap:24px; align-items:flex-start; flex-wrap:wrap; }
+        .score-card--secondary { padding:18px 24px; }
         .score-left { flex-shrink:0; }
         .score-label { font-size:11px; font-weight:500; letter-spacing:0.06em; text-transform:uppercase; color:#aaa; margin-bottom:6px; }
         .score-number-row { display:flex; align-items:flex-end; gap:4px; }
+        .score-card--secondary .score-number { font-size:38px; }
         .score-number { font-family:'Instrument Serif',serif; font-size:56px; line-height:1; color:#111; }
         .score-denom { font-size:22px; color:#bbb; margin-bottom:6px; }
+        .score-caveat { font-size:10.5px; color:#bbb; margin-top:6px; max-width:140px; line-height:1.4; }
         .score-right { flex:1; min-width:200px; }
         .confidence-badge { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:500; border-radius:99px; padding:5px 12px; margin-bottom:12px; }
         .confidence-dot { width:6px; height:6px; border-radius:50%; }
@@ -1295,6 +1321,18 @@ export default function BlueprintPage() {
         .gtm-metric-why { font-size:13px; color:#666; line-height:1.65; }
         .gtm-risks { padding-left:18px; margin:0; display:flex; flex-direction:column; gap:6px; }
         .gtm-risks li { font-size:13px; color:#555; line-height:1.6; }
+        .research-card { background:#fff; border:1px solid #e8e8e5; border-radius:16px; padding:24px 28px; }
+        .research-label { font-size:11px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:#aaa; margin-bottom:6px; }
+        .research-sub { font-size:13px; color:#888; line-height:1.6; margin-bottom:20px; }
+        .research-section { margin-bottom:18px; }
+        .research-section:last-child { margin-bottom:0; }
+        .research-section-title { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:#bbb; margin-bottom:8px; }
+        .research-source-row { display:flex; align-items:baseline; justify-content:space-between; gap:12px; padding:8px 10px; background:#f8f8f7; border-radius:8px; margin-bottom:4px; text-decoration:none; transition:background 0.15s; }
+        .research-source-row:hover { background:#f0f0ee; }
+        .research-source-title { font-size:13px; color:#333; line-height:1.5; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .research-source-url { font-size:11px; color:#aaa; flex-shrink:0; }
+        .inline-link { color:#2563eb; text-decoration:underline; text-decoration-color:#bfdbfe; word-break:break-word; }
+        .inline-link:hover { color:#1d4ed8; }
         .bp-sections { max-width:720px; margin:0 auto; padding:16px 24px 0; display:flex; flex-direction:column; gap:12px; }
         .section-card { background:#fff; border:1px solid #e8e8e5; border-radius:16px; padding:28px 28px 24px; animation:fadeUp 0.4s ease both; transition:box-shadow 0.2s; }
         .section-card:hover { box-shadow:0 4px 20px rgba(0,0,0,0.05); }
@@ -1318,8 +1356,6 @@ export default function BlueprintPage() {
         .do-not-list { padding-left:18px; margin:0; }
         .do-not-list li { font-size:14px; color:#555; margin-bottom:6px; line-height:1.6; }
         .do-not-list li:last-child { margin-bottom:0; }
-
-        /* ── Build This For Me section ── */
         .build-this-section { max-width:720px; margin:32px auto 0; padding:0 24px 48px; }
         .build-this-inner { background:#111; border-radius:20px; padding:36px 40px; display:flex; align-items:center; justify-content:space-between; gap:24px; flex-wrap:wrap; }
         .build-this-text { flex:1; min-width:220px; }
@@ -1330,8 +1366,6 @@ export default function BlueprintPage() {
         .build-this-btn:hover { background:#f0f0ee; transform:translateY(-1px); }
         .build-this-btn:active { transform:translateY(0); }
         .build-this-btn:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
-
-        /* ── Build modal ── */
         .build-modal-box { max-width:400px; text-align:left; }
         .build-modal-close { position:absolute; top:16px; right:18px; background:none; border:none; font-size:22px; color:#aaa; cursor:pointer; line-height:1; padding:4px; }
         .build-modal-close:hover { color:#555; }
@@ -1352,29 +1386,18 @@ export default function BlueprintPage() {
         .build-btn-maybe,.build-btn-no { flex:1; background:#f4f4f2; color:#444; border:1px solid #e0e0dd; border-radius:10px; padding:11px; font-size:14px; font-weight:500; cursor:pointer; transition:background 0.15s; }
         .build-btn-maybe:hover:not(:disabled),.build-btn-no:hover:not(:disabled) { background:#eaeae8; }
         .build-btn-maybe:disabled,.build-btn-no:disabled { opacity:0.5; cursor:not-allowed; }
-        .build-modal-input { width:100%; border:1px solid #e0e0dd; border-radius:10px; padding:11px 14px; font-size:14px; font-family:'DM Sans',sans-serif; outline:none; margin-bottom:14px; }
-        .build-modal-input:focus { border-color:#999; }
         .build-modal-textarea { width:100%; border:1px solid #e0e0dd; border-radius:10px; padding:11px 14px; font-size:14px; font-family:'DM Sans',sans-serif; outline:none; resize:none; margin-bottom:14px; }
         .build-modal-textarea:focus { border-color:#999; }
         .build-modal-confirm { text-align:center; padding:12px 0; }
-        .build-modal-confirm-icon { font-size:40px; margin-bottom:14px; }
         .build-modal-link-btn { background:none; border:none; font-size:13px; color:#999; cursor:pointer; margin-top:16px; text-decoration:underline; }
         .build-modal-link-btn:hover { color:#555; }
         .build-modal-error { font-size:13px; color:#dc2626; text-align:center; margin-top:10px; }
-
         .bp-footer { max-width:720px; margin:0 auto; padding:24px 24px 48px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; border-top:1px solid #e8e8e5; }
         .bp-footer p { font-size:12px; color:#bbb; }
         .bp-footer a { font-size:13px; font-weight:500; color:#111; text-decoration:none; }
         .bp-footer a:hover { text-decoration:underline; }
         .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center; z-index:100; padding:24px; }
         .modal-box { position:relative; background:#fff; border-radius:20px; padding:32px; width:100%; text-align:center; }
-        .modal-title { font-size:20px; font-weight:600; color:#111; margin-bottom:8px; }
-        .modal-sub { font-size:14px; color:#666; line-height:1.6; margin-bottom:24px; }
-        .modal-actions { display:flex; flex-direction:column; gap:10px; }
-        .modal-btn-primary { display:block; background:#111; color:#fff; border-radius:99px; padding:12px; font-size:14px; font-weight:500; text-decoration:none; transition:background 0.15s; }
-        .modal-btn-primary:hover { background:#333; }
-        .modal-btn-secondary { background:none; border:1px solid #e0e0dd; border-radius:99px; padding:12px; font-size:14px; color:#666; cursor:pointer; transition:background 0.15s; }
-        .modal-btn-secondary:hover { background:#f4f4f2; }
         @media (max-width:600px) {
           .bp-hero { padding:40px 20px 32px; }
           .section-card { padding:22px 18px 20px; }
@@ -1386,6 +1409,8 @@ export default function BlueprintPage() {
           .build-header { flex-direction:column; align-items:flex-start; }
           .gtm-step-grid { grid-template-columns:1fr; }
           .build-modal-actions { flex-direction:column; }
+          .risk-card { padding:22px 20px 20px; }
+          .risk-row-top { flex-direction:column; }
         }
       `}</style>
     </main>
